@@ -1,0 +1,6 @@
+{
+  "name": "Property Scout",
+  "description": "A smart personal property acquisition dashboard for evaluating Victoria, Australia acreage listings with commute analysis, AI extraction, and financial insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
