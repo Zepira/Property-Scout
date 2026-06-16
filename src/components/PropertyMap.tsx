@@ -1,8 +1,14 @@
-import React, { useState } from "react";
-import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useAdvancedMarkerRef } from "@vis.gl/react-google-maps";
+import React, { useState, Component, ReactNode } from "react";
+import { APIProvider, Map, AdvancedMarker, InfoWindow, useAdvancedMarkerRef } from "@vis.gl/react-google-maps";
 import { Property } from "../types";
 
-const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "AIzaSyBRCXm3cMSGUX4GhtK-VbP0RfNfMqQeQ8o";
+class MapErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? this.props.fallback : this.props.children; }
+}
+
+const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
 const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY" && API_KEY.trim() !== "";
 
 const MOORABBIN = { lat: -37.947291, lng: 145.064560 };
@@ -11,36 +17,36 @@ interface PropertyMapProps {
   property: Property;
 }
 
+function PropertyPin({ color, label }: { color: string; label?: string }) {
+  return (
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: "50% 50% 50% 0",
+        background: color, transform: "rotate(-45deg)",
+        border: "2px solid rgba(0,0,0,0.25)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <span style={{ transform: "rotate(45deg)", fontSize: 14 }}>{label ?? "📍"}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PropertyMap({ property }: PropertyMapProps) {
   const propertyCoords = property.lat && property.lng ? { lat: property.lat, lng: property.lng } : null;
   const [openMarker, setOpenMarker] = useState<"property" | "workplace" | null>(null);
-
   const [propMarkerRef, propMarker] = useAdvancedMarkerRef();
   const [workMarkerRef, workMarker] = useAdvancedMarkerRef();
 
   if (!hasValidKey) {
     return (
       <div className="bg-bg-dark border border-border-dark rounded-xl p-6 flex flex-col items-center justify-center text-center h-[350px] animate-fade-in">
-        <div className="p-3 bg-accent-dark/15 text-accent-dark rounded-full mb-3">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-        </div>
         <h4 className="font-semibold text-text-main mb-1">Google Maps API Key Missing</h4>
-        <p className="text-xs text-text-dim max-w-sm mb-4">
-          To enable live 3D Google Maps & routing calculations, add your Google Maps key in the system secrets.
-        </p>
-        <div className="text-left text-xs bg-card-dark p-3 rounded-lg border border-border-dark shadow-md space-y-1.5 font-mono max-w-sm text-text-dim">
-          <p className="text-[10px] text-accent-dark uppercase font-semibold">API Key Steps:</p>
-          <p>1. Open Settings (⚙️ top right)</p>
-          <p>2. Go to Secrets tab</p>
-          <p>3. Name: <code className="bg-bg-dark border border-border-dark text-accent-dark px-1.5 py-0.5 rounded font-mono font-bold text-[11px]">GOOGLE_MAPS_PLATFORM_KEY</code></p>
-          <p>4. Save & Enter your real GMP API Key</p>
-        </div>
-        {/* Simple Fallback Card Layout for coordinate distances */}
+        <p className="text-xs text-text-dim max-w-sm">Add GOOGLE_MAPS_PLATFORM_KEY to your .env.local to enable the map.</p>
         {propertyCoords && (
-          <div className="mt-4 pt-3 border-t border-border-dark/60 w-full text-xs text-text-dim font-mono">
-            Direct distance: {((getDistance(propertyCoords.lat, propertyCoords.lng, MOORABBIN.lat, MOORABBIN.lng)).toFixed(1))} km to Moorabbin VIC
+          <div className="mt-4 text-xs text-text-dim font-mono">
+            Straight-line distance: {getDistance(propertyCoords.lat, propertyCoords.lng, MOORABBIN.lat, MOORABBIN.lng).toFixed(1)} km to Moorabbin
           </div>
         )}
       </div>
@@ -50,45 +56,51 @@ export default function PropertyMap({ property }: PropertyMapProps) {
   const center = propertyCoords || MOORABBIN;
 
   return (
+    <MapErrorBoundary fallback={
+      <div className="w-full h-[400px] rounded-xl border border-border-dark bg-bg-dark flex items-center justify-center text-center p-6">
+        <div>
+          <p className="font-semibold text-text-main mb-1">Map failed to load</p>
+          <p className="text-xs text-text-dim">Enable the <strong>Maps JavaScript API</strong> in Google Cloud Console, then reload.</p>
+          {propertyCoords && <p className="text-xs text-text-dim font-mono mt-2">{property.address}</p>}
+        </div>
+      </div>
+    }>
     <div className="w-full h-[400px] rounded-xl overflow-hidden shadow-md border border-border-dark relative animate-fade-in">
-      <APIProvider apiKey={API_KEY} version="weekly">
+      <APIProvider apiKey={API_KEY}>
         <Map
           defaultCenter={center}
           defaultZoom={11}
-          mapId="PROPERTY_SCOUT_MAP"
-          internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
+          mapId="DEMO_MAP_ID"
           style={{ width: "100%", height: "100%" }}
-          className="w-full h-full"
         >
           {propertyCoords && (
             <AdvancedMarker
               ref={propMarkerRef}
               position={propertyCoords}
-              onClick={() => setOpenMarker("property")}
+              onClick={() => setOpenMarker(prev => prev === "property" ? null : "property")}
             >
-              <Pin background="#ea4335" glyphColor="#fff" />
+              <PropertyPin color="#ef4444" label="🏡" />
             </AdvancedMarker>
           )}
 
           <AdvancedMarker
             ref={workMarkerRef}
             position={MOORABBIN}
-            onClick={() => setOpenMarker("workplace")}
+            onClick={() => setOpenMarker(prev => prev === "workplace" ? null : "workplace")}
           >
-            <Pin background="#4285f4" glyphColor="#fff" glyphText="💼" />
+            <PropertyPin color="#3b82f6" label="💼" />
           </AdvancedMarker>
 
-          {openMarker === "property" && propertyCoords && (
+          {openMarker === "property" && propertyCoords && propMarker && (
             <InfoWindow anchor={propMarker} onCloseClick={() => setOpenMarker(null)}>
               <div className="p-1 font-sans text-xs">
-                <p className="font-semibold text-slate-900">Property</p>
-                <p className="text-slate-600 mt-0.5">{property.address}</p>
+                <p className="font-semibold text-slate-900">{property.address}</p>
                 <p className="text-indigo-600 font-semibold mt-1">${property.price.toLocaleString()}</p>
               </div>
             </InfoWindow>
           )}
 
-          {openMarker === "workplace" && (
+          {openMarker === "workplace" && workMarker && (
             <InfoWindow anchor={workMarker} onCloseClick={() => setOpenMarker(null)}>
               <div className="p-1 font-sans text-xs">
                 <p className="font-semibold text-slate-900">QLM Labelmakers</p>
@@ -98,31 +110,27 @@ export default function PropertyMap({ property }: PropertyMapProps) {
           )}
         </Map>
       </APIProvider>
+
       <div className="absolute bottom-4 left-4 bg-card-dark/95 backdrop-blur-sm px-3 py-2 rounded-lg shadow-lg border border-border-dark text-[11px] font-mono font-medium z-10 flex flex-col gap-1 text-text-main">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
-          <span>Property Position</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+          <span>Property</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
           <span>QLM Workspace (Moorabbin)</span>
         </div>
       </div>
     </div>
+    </MapErrorBoundary>
   );
 }
 
-// Haversine distance calculator inside React
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // km
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

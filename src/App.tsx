@@ -22,9 +22,24 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<PropertyStatus | "All">("All");
   const [sortBy, setSortBy] = useState<"score" | "price_asc" | "price_desc" | "acres">("score");
 
-  // Load properties on mount
+  // Load properties on mount, then poll every 5s to pick up extension imports
   useEffect(() => {
     loadProperties();
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/properties");
+        const data = await res.json();
+        setProperties((prev) => {
+          if (data.length !== prev.length) {
+            // New property arrived — select it
+            const newOnes = data.filter((d: Property) => !prev.find((p) => p.id === d.id));
+            if (newOnes.length > 0) setSelectedPropertyId(newOnes[0].id);
+          }
+          return data;
+        });
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadProperties = async () => {

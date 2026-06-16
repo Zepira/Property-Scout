@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 320px;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    .header {
+      padding: 16px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .header h1 { font-size: 15px; font-weight: 600; color: #f8fafc; }
+    .header p { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .body { padding: 12px; }
+    #scan-btn {
+      width: 100%;
+      padding: 10px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #scan-btn:hover { background: #1d4ed8; }
+    #scan-btn:disabled { background: #334155; color: #64748b; cursor: default; }
+    #results { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .tab-row {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .tab-url {
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .tab-status { font-weight: 500; }
+    .tab-status.pending  { color: #64748b; }
+    .tab-status.loading  { color: #f59e0b; }
+    .tab-status.success  { color: #22c55e; }
+    .tab-status.exists   { color: #64748b; }
+    .tab-status.error    { color: #ef4444; }
+    #empty { font-size: 13px; color: #64748b; text-align: center; padding: 16px 0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Property Scout</h1>
+    <p>Scan open listing tabs and import them</p>
+  </div>
+  <div class="body">
+    <button id="scan-btn">Scan Open Tabs</button>
+    <div id="results"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

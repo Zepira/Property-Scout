@@ -52,10 +52,13 @@ export async function geocodeAddress(address: string, apiKey: string): Promise<{
     const response = await fetch(url);
     const data = (await response.json()) as any;
     if (data.status === "OK" && data.results?.[0]?.geometry?.location) {
-      return data.results[0].geometry.location;
+      const loc = data.results[0].geometry.location;
+      console.log(`Geocoded "${address}" → lat=${loc.lat} lng=${loc.lng}`);
+      return loc;
     }
+    console.warn(`Geocoding failed for "${address}": status=${data.status} error=${data.error_message || ""}`);
   } catch (error) {
-    console.error("Geocoding failed:", error);
+    console.error("Geocoding exception:", error);
   }
   return null;
 }
@@ -69,45 +72,53 @@ export async function fetchCommuteTimes(
   apiKey: string
 ): Promise<{ timeAM: number; timePM: number } | null> {
   if (!apiKey) return null;
+
+  const today = new Date();
+  const nextMonday = new Date(today);
+  nextMonday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7));
+
+  const makeDepTime = (hour: number, minute: number) => {
+    const d = new Date(nextMonday);
+    d.setHours(hour, minute, 0, 0);
+    return d.toISOString();
+  };
+
+  const routesDuration = async (departureIso: string): Promise<number> => {
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "routes.duration",
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: { latitude: lat, longitude: lng } } },
+        destination: { location: { latLng: { latitude: MOORABBIN_LAT, longitude: MOORABBIN_LNG } } },
+        travelMode: "DRIVE",
+        routingPreference: "TRAFFIC_AWARE",
+        departureTime: departureIso,
+      }),
+    });
+    const data = (await res.json()) as any;
+    if (!res.ok || !data.routes?.[0]?.duration) {
+      console.error("Routes API error:", JSON.stringify(data).substring(0, 300));
+      throw new Error(`Routes API failed: ${data.error?.message || res.status}`);
+    }
+    // duration is like "3720s"
+    return Math.round(parseInt(data.routes[0].duration) / 60);
+  };
+
   try {
-    // Departure time for 12 AM (mid-night) and 1 PM (afternoon) relative to next weekday
-    // 12 AM (midnight)
-    const today = new Date();
-    const nextWeekday = new Date(today);
-    nextWeekday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7)); // Next Monday
-    
-    const dateAM = new Date(nextWeekday);
-    dateAM.setHours(0, 0, 0, 0); // 12 AM
-    const departureAM = Math.floor(dateAM.getTime() / 1000);
-
-    const datePM = new Date(nextWeekday);
-    datePM.setHours(13, 0, 0, 0); // 1 PM
-    const departurePM = Math.floor(datePM.getTime() / 1000);
-
-    const getDuration = async (depTime: number): Promise<number> => {
-      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${lat},${lng}&destinations=${MOORABBIN_LAT},${MOORABBIN_LNG}&departure_time=${depTime}&traffic_model=best_guess&mode=driving&key=${apiKey}`;
-      const res = await fetch(url);
-      const data = (await res.json()) as any;
-      if (
-        data.status === "OK" &&
-        data.rows?.[0]?.elements?.[0]?.status === "OK"
-      ) {
-        const element = data.rows[0].elements[0];
-        // duration_in_traffic if available, else standard duration
-        const durationValue = element.duration_in_traffic?.value ?? element.duration?.value;
-        return Math.round(durationValue / 60); // minutes
-      }
-      throw new Error("Invalid Distance Matrix response");
-    };
-
-    const timeAM = await getDuration(departureAM);
-    const timePM = await getDuration(departurePM);
-
+    const [timeAM, timePM] = await Promise.all([
+      routesDuration(makeDepTime(8, 0)),
+      routesDuration(makeDepTime(17, 30)),
+    ]);
+    console.log(`Commute via Routes API: AM=${timeAM}min PM=${timePM}min`);
     return { timeAM, timePM };
-  } catch (error) {
-    console.error("Failed to fetch commute times from Google Maps:", error);
+  } catch (err) {
+    console.warn("Routes API failed, using Haversine estimate:", err);
+    return null;
   }
-  return null;
 }
 
 /**

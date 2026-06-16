@@ -1,4 +1,6 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+dotenv.config(); // fallback to .env
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -10,7 +12,19 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "25mb" }));
+
+  // Allow Chrome extension and local dev to call the API
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || "";
+    if (origin.startsWith("chrome-extension://") || origin.startsWith("http://localhost")) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
 
   // Initialize SQLite database
   const db = await getDb();
@@ -66,15 +80,39 @@ async function startServer() {
 
   // API ROUTE: Scrape property listing URL or manual processing
   app.post("/api/scrape", async (req, res) => {
-    const { url, descriptionText, address, price, landSize, bedrooms, bathrooms, carSpaces } = req.body;
+    const { url, htmlContent, browserImages, descriptionText, address, price, landSize, bedrooms, bathrooms, carSpaces } = req.body;
     
     try {
       let extracted: any;
 
       if (url && (url.includes("domain.com.au") || url.includes("realestate.com.au") || url.startsWith("http"))) {
-        // Run AI Scraper
-        console.log(`Analyzing url via Gemini Grounding: ${url}`);
-        extracted = await extractPropertyFromUrl(url);
+        let pageHtml = htmlContent || "";
+
+        if (!pageHtml) {
+          console.log(`Fetching page HTML for: ${url}`);
+          try {
+            const pageRes = await fetch(url, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-AU,en;q=0.9",
+              },
+            });
+            if (pageRes.ok) {
+              pageHtml = await pageRes.text();
+              console.log(`Fetched ${pageHtml.length} chars of HTML`);
+            } else {
+              console.warn(`Page fetch returned ${pageRes.status}, will try with empty content`);
+            }
+          } catch (fetchErr) {
+            console.warn(`Page fetch failed (${fetchErr}), extension content required`);
+          }
+        } else {
+          console.log(`Using browser-provided HTML (${pageHtml.length} chars) for: ${url}`);
+        }
+
+        console.log(`Parsing property data for: ${url}`);
+        extracted = await extractPropertyFromUrl(url, pageHtml);
       } else if (descriptionText) {
         // Run AI Extraction on listing text
         console.log(`Extracting from manually pasted listing description...`);
@@ -122,20 +160,25 @@ async function startServer() {
           lat = coords.lat;
           lng = coords.lng;
         } else {
-          // Approximate coordinate in South-East Melbourne/Victoria if none resolved
-          lat = -40; // Default off-center markers, let client adjust or keep null
-          lng = 145;
-          
-          if (extracted.address.toLowerCase().includes("emerald") || extracted.address.toLowerCase().includes("olinda") || extracted.address.toLowerCase().includes("ranges")) {
-            lat = -37.8546; lng = 145.4371; // Dandenong Ranges
-          } else if (extracted.address.toLowerCase().includes("pakenham") || extracted.address.toLowerCase().includes("beaconsfield") || extracted.address.toLowerCase().includes("cardinia")) {
-            lat = -38.0712; lng = 145.4856; // Cardinia Shire
-          } else if (extracted.address.toLowerCase().includes("moorabbin")) {
-            lat = -37.947291; lng = 145.064560; // Moorabbin
-          } else {
-            // General Melb SE
-            lat = -38.0163; lng = 145.2148;
+          console.warn(`No coordinates for "${extracted.address}" — geocoding failed, using suburb lookup`);
+          const addr = extracted.address.toLowerCase();
+          const suburbCoords: [string[], number, number][] = [
+            [["gembrook", "tonimbuk"], -37.9528, 145.5581],
+            [["hoddles creek", "launching place"], -37.7833, 145.5500],
+            [["emerald", "olinda", "sassafras", "monbulk", "belgrave"], -37.8546, 145.4371],
+            [["modella", "garfield", "bunyip", "longwarry", "nar nar goon"], -38.0500, 145.6200],
+            [["pakenham", "beaconsfield", "officer", "cardinia"], -38.0712, 145.4856],
+            [["koo wee rup", "lang lang", "tynong"], -38.1950, 145.5500],
+            [["warrandyte", "yarrambat", "wonga park"], -37.7500, 145.2300],
+            [["moorabbin", "bentleigh", "cheltenham"], -37.9473, 145.0646],
+          ];
+          let found = false;
+          for (const [keywords, defLat, defLng] of suburbCoords) {
+            if (keywords.some(k => addr.includes(k))) {
+              lat = defLat; lng = defLng; found = true; break;
+            }
           }
+          if (!found) { lat = -38.0163; lng = 145.2148; }
         }
       }
 
@@ -189,11 +232,16 @@ async function startServer() {
         );
       }
 
+      // Merge images: prefer parsed images, fill with browser-captured ones
+      const mergedImages: string[] = extracted.images && extracted.images.length
+        ? extracted.images
+        : (browserImages || []);
+
       const cleanResult = {
         ...extracted,
         lat,
         lng,
-        images: extracted.images && extracted.images.length ? extracted.images : [],
+        images: mergedImages,
         ...scores,
         status: "New",
         notes: "",
