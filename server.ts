@@ -10,7 +10,7 @@ import { calculateScores, geocodeAddress, fetchCommuteTimes } from "./server/sco
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = 5000;
 
   app.use(express.json({ limit: "25mb" }));
 
@@ -19,7 +19,7 @@ async function startServer() {
     const origin = req.headers.origin || "";
     if (origin.startsWith("chrome-extension://") || origin.startsWith("http://localhost")) {
       res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     }
     if (req.method === "OPTIONS") return res.sendStatus(204);
@@ -255,75 +255,101 @@ async function startServer() {
     }
   });
 
-  // API ROUTE: Save new property
+  // API ROUTE: Save or update property (upsert by URL)
   app.post("/api/properties", async (req, res) => {
     const p = req.body;
 
-    try {
-      const result = await db.run(
-        `INSERT INTO properties (
-          url, address, price, landSize, bedrooms, bathrooms, carSpaces, description,
-          agentName, agentAgency, agentPhone, images, lat, lng,
-          existingHouse, vacantLand, shed, dam, waterTanks, stables, horseFacilities, powerConnected, septic,
-          bushfireMentions, buildabilityMentions, planningReferences, nativeVegetationReferences,
-          commuteScore, commuteTimeAM, commuteTimePM, landScore, budgetScore, horseScore, buildabilityScore, overallScore,
-          status, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          p.url || "",
-          p.address,
-          Number(p.price) || 0,
-          Number(p.landSize) || 0,
-          Number(p.bedrooms) || 0,
-          Number(p.bathrooms) || 0,
-          Number(p.carSpaces) || 0,
-          p.description || "",
-          p.agentName || "",
-          p.agentAgency || "",
-          p.agentPhone || "",
-          JSON.stringify(p.images || []),
-          Number(p.lat) || null,
-          Number(p.lng) || null,
-          p.existingHouse ? 1 : 0,
-          p.vacantLand ? 1 : 0,
-          p.shed ? 1 : 0,
-          p.dam ? 1 : 0,
-          p.waterTanks ? 1 : 0,
-          p.stables ? 1 : 0,
-          p.horseFacilities ? 1 : 0,
-          p.powerConnected ? 1 : 0,
-          p.septic ? 1 : 0,
-          p.bushfireMentions || "",
-          p.buildabilityMentions || "",
-          p.planningReferences || "",
-          p.nativeVegetationReferences || "",
-          Number(p.commuteScore) || 0,
-          Number(p.commuteTimeAM) || 0,
-          Number(p.commuteTimePM) || 0,
-          Number(p.landScore) || 0,
-          Number(p.budgetScore) || 0,
-          Number(p.horseScore) || 0,
-          Number(p.buildabilityScore) || 0,
-          Number(p.overallScore) || 0,
-          p.status || "New",
-          p.notes || "",
-        ]
-      );
+    // Strip query params and fragments so re-visiting a URL with tracking params still matches
+    const normalizeUrl = (u: string) => {
+      try { const parsed = new URL(u); return parsed.origin + parsed.pathname; } catch { return u; }
+    };
+    const canonicalUrl = normalizeUrl(p.url || "");
 
-      const savedProperty = await db.get("SELECT * FROM properties WHERE id = ?", [result.lastID]);
-      res.json({
-        ...savedProperty,
-        images: JSON.parse(savedProperty.images || "[]"),
-        existingHouse: savedProperty.existingHouse === 1,
-        vacantLand: savedProperty.vacantLand === 1,
-        shed: savedProperty.shed === 1,
-        dam: savedProperty.dam === 1,
-        waterTanks: savedProperty.waterTanks === 1,
-        stables: savedProperty.stables === 1,
-        horseFacilities: savedProperty.horseFacilities === 1,
-        powerConnected: savedProperty.powerConnected === 1,
-        septic: savedProperty.septic === 1,
-      });
+    const fieldValues = [
+      canonicalUrl,
+      p.address,
+      Number(p.price) || 0,
+      Number(p.landSize) || 0,
+      Number(p.bedrooms) || 0,
+      Number(p.bathrooms) || 0,
+      Number(p.carSpaces) || 0,
+      p.description || "",
+      p.agentName || "",
+      p.agentAgency || "",
+      p.agentPhone || "",
+      JSON.stringify(p.images || []),
+      Number(p.lat) || null,
+      Number(p.lng) || null,
+      p.existingHouse ? 1 : 0,
+      p.vacantLand ? 1 : 0,
+      p.shed ? 1 : 0,
+      p.dam ? 1 : 0,
+      p.waterTanks ? 1 : 0,
+      p.stables ? 1 : 0,
+      p.horseFacilities ? 1 : 0,
+      p.powerConnected ? 1 : 0,
+      p.septic ? 1 : 0,
+      p.bushfireMentions || "",
+      p.buildabilityMentions || "",
+      p.planningReferences || "",
+      p.nativeVegetationReferences || "",
+      Number(p.commuteScore) || 0,
+      Number(p.commuteTimeAM) || 0,
+      Number(p.commuteTimePM) || 0,
+      Number(p.landScore) || 0,
+      Number(p.budgetScore) || 0,
+      Number(p.horseScore) || 0,
+      Number(p.buildabilityScore) || 0,
+      Number(p.overallScore) || 0,
+    ];
+
+    const mapBooleans = (row: any) => ({
+      ...row,
+      images: JSON.parse(row.images || "[]"),
+      existingHouse: row.existingHouse === 1,
+      vacantLand: row.vacantLand === 1,
+      shed: row.shed === 1,
+      dam: row.dam === 1,
+      waterTanks: row.waterTanks === 1,
+      stables: row.stables === 1,
+      horseFacilities: row.horseFacilities === 1,
+      powerConnected: row.powerConnected === 1,
+      septic: row.septic === 1,
+    });
+
+    try {
+      const existing = canonicalUrl ? await db.get("SELECT * FROM properties WHERE url = ?", [canonicalUrl]) : null;
+
+      if (existing) {
+        // Update all listing data but preserve user's notes and status
+        await db.run(
+          `UPDATE properties SET
+            url = ?, address = ?, price = ?, landSize = ?, bedrooms = ?, bathrooms = ?, carSpaces = ?, description = ?,
+            agentName = ?, agentAgency = ?, agentPhone = ?, images = ?, lat = ?, lng = ?,
+            existingHouse = ?, vacantLand = ?, shed = ?, dam = ?, waterTanks = ?, stables = ?, horseFacilities = ?, powerConnected = ?, septic = ?,
+            bushfireMentions = ?, buildabilityMentions = ?, planningReferences = ?, nativeVegetationReferences = ?,
+            commuteScore = ?, commuteTimeAM = ?, commuteTimePM = ?, landScore = ?, budgetScore = ?, horseScore = ?, buildabilityScore = ?, overallScore = ?,
+            status = ?, notes = ?
+          WHERE id = ?`,
+          [...fieldValues, existing.status || "New", existing.notes || "", existing.id]
+        );
+        const updated = await db.get("SELECT * FROM properties WHERE id = ?", [existing.id]);
+        res.json({ ...mapBooleans(updated), upserted: "updated" });
+      } else {
+        const result = await db.run(
+          `INSERT INTO properties (
+            url, address, price, landSize, bedrooms, bathrooms, carSpaces, description,
+            agentName, agentAgency, agentPhone, images, lat, lng,
+            existingHouse, vacantLand, shed, dam, waterTanks, stables, horseFacilities, powerConnected, septic,
+            bushfireMentions, buildabilityMentions, planningReferences, nativeVegetationReferences,
+            commuteScore, commuteTimeAM, commuteTimePM, landScore, budgetScore, horseScore, buildabilityScore, overallScore,
+            status, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [...fieldValues, p.status || "New", p.notes || ""]
+        );
+        const saved = await db.get("SELECT * FROM properties WHERE id = ?", [result.lastID]);
+        res.json({ ...mapBooleans(saved), upserted: "created" });
+      }
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -400,6 +426,16 @@ async function startServer() {
         powerConnected: updated.powerConnected === 1,
         septic: updated.septic === 1,
       });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API ROUTE: Delete all properties
+  app.delete("/api/properties", async (req, res) => {
+    try {
+      await db.run("DELETE FROM properties", []);
+      res.json({ status: "ok" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

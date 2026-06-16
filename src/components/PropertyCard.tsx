@@ -19,6 +19,8 @@ export default function PropertyCard({ property, isSelected, onSelect }: Propert
     Purchased: "bg-emerald-950/40 text-emerald-400 border-emerald-900/50",
   }[property.status] || "bg-bg-dark text-text-dim border-border-dark";
 
+  const fmtMins = (m: number) => { const h = Math.floor(m / 60); const r = m % 60; return h > 0 ? `${h}h ${r}m` : `${r}m`; };
+
   // Score color helper
   const getScoreColor = (score: number) => {
     if (score >= 75) return "text-success-dark bg-success-dark/20 border-success-dark/40";
@@ -88,7 +90,7 @@ export default function PropertyCard({ property, isSelected, onSelect }: Propert
         <div className="mt-4 pt-3 border-t border-border-dark flex justify-between items-center text-[10px] text-text-dim font-mono uppercase tracking-wider">
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-dark"></span>
-            Commute: {Math.round((property.commuteTimeAM + property.commuteTimePM) / 2)} mins
+            Commute: {fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2))}
           </div>
           {property.url ? (
             <span className="text-success-dark font-semibold flex items-center gap-0.5">

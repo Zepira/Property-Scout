@@ -1,4 +1,4 @@
-const SERVER = "http://localhost:3000";
+const SERVER = "http://localhost:5000";
 
 const LISTING_PATTERNS = [
   /domain\.com\.au\/[\w-]+-\d{5,}/,
@@ -35,16 +35,24 @@ async function scrapeTab(tab, statusEl) {
         try {
           // Structured JSON-LD (schema.org)
           const jsonLd = Array.from(
-            document.querySelectorAll('script[type="application/ld+json"]')
+            document.querySelectorAll('script[type="application/ld+json"]'),
           )
-            .map((s) => { try { return JSON.parse(s.textContent); } catch { return null; } })
+            .map((s) => {
+              try {
+                return JSON.parse(s.textContent);
+              } catch {
+                return null;
+              }
+            })
             .filter(Boolean);
 
           // __NEXT_DATA__ — domain.com.au / realestate.com.au store full listing here
           let nextData = null;
           const nextScript = document.getElementById("__NEXT_DATA__");
           if (nextScript) {
-            try { nextData = JSON.parse(nextScript.textContent); } catch {}
+            try {
+              nextData = JSON.parse(nextScript.textContent);
+            } catch {}
           }
 
           // Images: OG image + all large listing photos
@@ -56,7 +64,9 @@ async function scrapeTab(tab, statusEl) {
             if (
               src &&
               !src.startsWith("data:") &&
-              (img.naturalWidth > 300 || img.width > 300 || img.getAttribute("width") > 300) &&
+              (img.naturalWidth > 300 ||
+                img.width > 300 ||
+                img.getAttribute("width") > 300) &&
               !images.includes(src)
             ) {
               images.push(src);
@@ -76,7 +86,14 @@ async function scrapeTab(tab, statusEl) {
             .trim()
             .substring(0, 20000);
 
-          return { ok: true, jsonLd, nextData, images: images.slice(0, 20), visibleText, url: location.href };
+          return {
+            ok: true,
+            jsonLd,
+            nextData,
+            images: images.slice(0, 20),
+            visibleText,
+            url: location.href,
+          };
         } catch (e) {
           return { ok: false, error: e.message };
         }
@@ -84,33 +101,52 @@ async function scrapeTab(tab, statusEl) {
     });
 
     if (!results || !results[0]) {
-      setStatus(statusEl, "error", "Script injection failed — try reloading the tab");
+      setStatus(
+        statusEl,
+        "error",
+        "Script injection failed — try reloading the tab",
+      );
       return;
     }
 
     injected = results[0].result;
   } catch (e) {
-    setStatus(statusEl, "error", "Cannot read page: " + (e.message || "permission denied"));
+    setStatus(
+      statusEl,
+      "error",
+      "Cannot read page: " + (e.message || "permission denied"),
+    );
     return;
   }
 
   if (!injected || !injected.ok) {
-    setStatus(statusEl, "error", "Page read error: " + (injected?.error || "unknown"));
+    setStatus(
+      statusEl,
+      "error",
+      "Page read error: " + (injected?.error || "unknown"),
+    );
     return;
   }
 
   const { jsonLd, nextData, images: pageImages, visibleText, url } = injected;
 
   if (!visibleText || visibleText.length < 50) {
-    setStatus(statusEl, "error", "Page appears empty — try refreshing the listing");
+    setStatus(
+      statusEl,
+      "error",
+      "Page appears empty — try refreshing the listing",
+    );
     return;
   }
 
   // Send JSON-LD first (parser expects it before the double newline), then visible text.
   // Append __NEXT_DATA__ as extra context if present.
-  const structuredPart = jsonLd && jsonLd.length ? JSON.stringify(jsonLd) : "[]";
+  const structuredPart =
+    jsonLd && jsonLd.length ? JSON.stringify(jsonLd) : "[]";
   // Send enough of __NEXT_DATA__ to capture gallery + geo (coords are often deep in the JSON)
-  const nextPart = nextData ? "\n\nNEXT_DATA:" + JSON.stringify(nextData).substring(0, 60000) : "";
+  const nextPart = nextData
+    ? "\n\nNEXT_DATA:" + JSON.stringify(nextData).substring(0, 60000)
+    : "";
   const htmlContent = structuredPart + "\n\n" + visibleText + nextPart;
   const browserImages = pageImages || [];
 
@@ -127,12 +163,18 @@ async function scrapeTab(tab, statusEl) {
     });
     scraped = await scrapeRes.json();
   } catch (e) {
-    setStatus(statusEl, "error", "Cannot reach server — is Property Scout running?");
+    setStatus(
+      statusEl,
+      "error",
+      "Cannot reach server — is Property Scout running?",
+    );
     return;
   }
 
   if (!scrapeRes.ok) {
-    const msg = (scraped?.error || `Server error ${scrapeRes.status}`).substring(0, 100);
+    const msg = (
+      scraped?.error || `Server error ${scrapeRes.status}`
+    ).substring(0, 100);
     setStatus(statusEl, "error", msg);
     return;
   }
@@ -148,21 +190,22 @@ async function scrapeTab(tab, statusEl) {
     });
     saved = await saveRes.json();
   } catch (e) {
-    setStatus(statusEl, "error", "Parsed OK but failed to save — is Property Scout running?");
+    setStatus(
+      statusEl,
+      "error",
+      "Parsed OK but failed to save — is Property Scout running?",
+    );
     return;
   }
 
   if (!saveRes.ok) {
     const msg = (saved?.error || `Save error ${saveRes.status}`).substring(0, 100);
-    if (msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exist")) {
-      setStatus(statusEl, "exists", "Already in your list");
-    } else {
-      setStatus(statusEl, "error", msg);
-    }
+    setStatus(statusEl, "error", msg);
     return;
   }
 
-  setStatus(statusEl, "success", "Added: " + (saved.address || scraped.address || "property"));
+  const label = saved.upserted === "updated" ? "Updated: " : "Added: ";
+  setStatus(statusEl, "success", label + (saved.address || scraped.address || "property"));
 }
 
 document.getElementById("scan-btn").addEventListener("click", async () => {
@@ -176,7 +219,8 @@ document.getElementById("scan-btn").addEventListener("click", async () => {
   try {
     allTabs = await chrome.tabs.query({});
   } catch (e) {
-    resultsEl.innerHTML = '<div id="empty">Failed to query tabs: ' + e.message + "</div>";
+    resultsEl.innerHTML =
+      '<div id="empty">Failed to query tabs: ' + e.message + "</div>";
     btn.disabled = false;
     btn.textContent = "Scan Open Tabs";
     return;
@@ -204,4 +248,43 @@ document.getElementById("scan-btn").addEventListener("click", async () => {
 
   btn.disabled = false;
   btn.textContent = "Scan Open Tabs";
+});
+
+document.getElementById("delete-all-btn").addEventListener("click", () => {
+  const btn = document.getElementById("delete-all-btn");
+  const resultsEl = document.getElementById("results");
+
+  // Inline confirmation to avoid popup-closes-on-dialog Chrome extension bug
+  resultsEl.innerHTML = `
+    <div id="empty">
+      Delete all properties?<br/>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+        <button id="confirm-delete" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px">Yes, delete all</button>
+        <button id="cancel-delete" style="padding:6px 14px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:13px">Cancel</button>
+      </div>
+    </div>`;
+
+  document.getElementById("cancel-delete").addEventListener("click", () => {
+    resultsEl.innerHTML = "";
+  });
+
+  document.getElementById("confirm-delete").addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Deleting...";
+    resultsEl.innerHTML = "";
+
+    try {
+      const res = await fetch(`${SERVER}/api/properties`, { method: "DELETE" });
+      if (res.ok) {
+        resultsEl.innerHTML = '<div id="empty">All properties deleted.</div>';
+      } else {
+        resultsEl.innerHTML = '<div id="empty">Delete failed — is Property Scout running?</div>';
+      }
+    } catch {
+      resultsEl.innerHTML = '<div id="empty">Cannot reach server — is Property Scout running?</div>';
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Delete All";
+  });
 });

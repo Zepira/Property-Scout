@@ -123,6 +123,13 @@ class JSONDatabase implements DatabaseInterface {
   }
 
   async get(query: string, params: any[] = []): Promise<any | undefined> {
+    if (query.toLowerCase().includes("where url = ?")) {
+      const normalize = (u: string) => {
+        try { const parsed = new URL(u); return parsed.origin + parsed.pathname; } catch { return u; }
+      };
+      const target = normalize(params[0] || "");
+      return this.data.find((p) => normalize(p.url || "") === target);
+    }
     const id = params[0];
     return this.data.find((p) => p.id === Number(id));
   }
@@ -230,6 +237,11 @@ class JSONDatabase implements DatabaseInterface {
     }
 
     if (isDelete) {
+      if (params.length === 0) {
+        this.data = [];
+        await this.save();
+        return { lastID: 0 };
+      }
       const id = params[0];
       this.data = this.data.filter((p) => p.id !== Number(id));
       await this.save();

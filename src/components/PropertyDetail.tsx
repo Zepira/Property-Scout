@@ -59,6 +59,8 @@ export default function PropertyDetail({ property, onUpdate, onDelete }: Propert
     }
   };
 
+  const fmtMins = (m: number) => { const h = Math.floor(m / 60); const r = m % 60; return h > 0 ? `${h}h ${r}m` : `${r}m`; };
+
   const getScoreBg = (score: number) => {
     if (score >= 75) return "bg-success-dark/10 text-success-dark border-success-dark/30";
     if (score >= 50) return "bg-warning-dark/10 text-warning-dark border-warning-dark/35";
@@ -200,15 +202,15 @@ export default function PropertyDetail({ property, onUpdate, onDelete }: Propert
             {/* Bento score cards */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { title: "Commute", score: property.commuteScore, desc: `${Math.round((property.commuteTimeAM + property.commuteTimePM)/2)} mins`, weight: "35%" },
-                { title: "Acreage", score: property.landScore, desc: `${property.landSize.toFixed(1)} ac`, weight: "25%" },
-                { title: "Affordability", score: property.budgetScore, desc: `$${(property.price/1000).toFixed(0)}k`, weight: "20%" },
-                { title: "Horses", score: property.horseScore, desc: "Equine suitability", weight: "10%" },
-                { title: "Buildability", score: property.buildabilityScore, desc: "Infrastructure", weight: "10%" },
-              ].map((card, i) => (
+                { title: "Commute", score: property.commuteScore, display: fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2)), desc: "avg commute", weight: "35%" },
+                { title: "Acreage", score: property.landScore, display: null, desc: `${property.landSize.toFixed(1)} ac`, weight: "25%" },
+                { title: "Affordability", score: property.budgetScore, display: null, desc: `$${(property.price/1000).toFixed(0)}k`, weight: "20%" },
+                { title: "Horses", score: property.horseScore, display: null, desc: "Equine suitability", weight: "10%" },
+                { title: "Buildability", score: property.buildabilityScore, display: null, desc: "Infrastructure", weight: "10%" },
+              ].map((card) => (
                 <div key={card.title} className={`p-3 border rounded-xl flex flex-col justify-between items-center text-center transition-all hover:scale-[1.03] ${getScoreBg(card.score)}`}>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-main">{card.title}</p>
-                  <div className="my-2 text-2xl font-black font-sans leading-none">{card.score}</div>
+                  <div className="my-2 text-2xl font-black font-sans leading-none">{card.display ?? card.score}</div>
                   <div>
                     <p className="text-[10px] text-text-dim font-medium truncate max-w-[80px]">{card.desc}</p>
                     <span className="text-[8px] bg-bg-dark/50 text-text-dim px-1 rounded block mt-1 font-mono">{card.weight}</span>
@@ -316,11 +318,11 @@ export default function PropertyDetail({ property, onUpdate, onDelete }: Propert
             <div className="text-xs space-y-1.5 font-mono">
               <div className="flex justify-between">
                 <span className="text-text-dim">Departure 12:00 AM (Ideal):</span>
-                <span className="font-bold text-text-main">{property.commuteTimeAM} minutes</span>
+                <span className="font-bold text-text-main">{fmtMins(property.commuteTimeAM)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-dim">Departure 1:00 PM (Lighter traffic):</span>
-                <span className="font-bold text-text-main">{property.commuteTimePM} minutes</span>
+                <span className="font-bold text-text-main">{fmtMins(property.commuteTimePM)}</span>
               </div>
               <div className="border-t border-border-dark pt-2 flex justify-between font-bold text-text-main">
                 <span className="text-text-dim font-sans">Acreage Commute Score:</span>

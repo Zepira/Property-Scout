@@ -31,6 +31,21 @@
     }
     #scan-btn:hover { background: #1d4ed8; }
     #scan-btn:disabled { background: #334155; color: #64748b; cursor: default; }
+    #delete-all-btn {
+      width: 100%;
+      padding: 8px;
+      margin-top: 8px;
+      background: transparent;
+      color: #ef4444;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    #delete-all-btn:hover { background: #450a0a; border-color: #ef4444; }
+    #delete-all-btn:disabled { color: #64748b; border-color: #334155; cursor: default; }
     #results { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
     .tab-row {
       background: #1e293b;
@@ -61,6 +76,7 @@
   </div>
   <div class="body">
     <button id="scan-btn">Scan Open Tabs</button>
+    <button id="delete-all-btn">Delete All</button>
     <div id="results"></div>
   </div>
   <script src="popup.js"></script>

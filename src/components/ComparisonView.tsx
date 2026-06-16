@@ -7,6 +7,8 @@ interface ComparisonViewProps {
   onSelectProperty: (id: number) => void;
 }
 
+const fmtMins = (m: number) => { const h = Math.floor(m / 60); const r = m % 60; return h > 0 ? `${h}h ${r}m` : `${r}m`; };
+
 export default function ComparisonView({ properties, onSelectProperty }: ComparisonViewProps) {
   if (properties.length === 0) {
     return (
@@ -124,8 +126,8 @@ export default function ComparisonView({ properties, onSelectProperty }: Compari
                 {/* 2. Commute travel times */}
                 <div className={`p-2 rounded-lg border ${isBestCommute ? "bg-success-dark/10 border-success-dark/40 text-success-dark" : "bg-bg-dark/50 border-border-dark/40 text-text-main"}`}>
                   <p className="text-[9px] uppercase font-bold text-text-dim">Commute to Moorabbin</p>
-                  <p className="font-mono font-bold mt-0.5 text-xs">{avgCommute.toFixed(0)} minutes avg</p>
-                  <div className="text-[9px] text-text-dim/80 mt-0.5 font-mono">AM: {p.commuteTimeAM}m • PM: {p.commuteTimePM}m</div>
+                  <p className="font-mono font-bold mt-0.5 text-xs">{fmtMins(Math.round(avgCommute))} avg</p>
+                  <div className="text-[9px] text-text-dim/80 mt-0.5 font-mono">AM: {fmtMins(p.commuteTimeAM)} • PM: {fmtMins(p.commuteTimePM)}</div>
                   {isBestCommute && <span className="text-[9px] font-bold text-success-dark block mt-0.5">✓ Shortest Commute</span>}
                 </div>
 
