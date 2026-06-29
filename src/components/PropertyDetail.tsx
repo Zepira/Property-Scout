@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Property, PropertyStatus } from "../types";
+import { SCORE_LABELS } from "../config";
 import PropertyMap from "./PropertyMap";
 import FinancialCalculator from "./FinancialCalculator";
 import { 
@@ -203,11 +204,10 @@ export default function PropertyDetail({ property, onUpdate, onDelete, activePro
             {/* Bento score cards */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { title: "Commute", score: property.commuteScore, display: fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2)), desc: "avg commute", weight: "35%" },
-                { title: "Acreage", score: property.landScore, display: null, desc: `${property.landSize.toFixed(1)} ac`, weight: "25%" },
-                { title: "Affordability", score: property.budgetScore, display: null, desc: `$${(property.price/1000).toFixed(0)}k`, weight: "20%" },
-                { title: "Horses", score: property.horseScore, display: null, desc: "Equine suitability", weight: "10%" },
-                { title: "Buildability", score: property.buildabilityScore, display: null, desc: "Infrastructure", weight: "10%" },
+                { title: SCORE_LABELS[activeProfile].commute, score: property.commuteScore, display: fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2)), desc: "avg commute", weight: "35%" },
+                { title: SCORE_LABELS[activeProfile].land, score: property.landScore, display: null, desc: `${property.landSize.toFixed(1)} ac`, weight: "25%" },
+                { title: SCORE_LABELS[activeProfile].budget, score: property.budgetScore, display: null, desc: `$${(property.price/1000).toFixed(0)}k`, weight: "20%" },
+                { title: SCORE_LABELS[activeProfile].primary, score: SCORE_LABELS[activeProfile].primaryScore(property), display: null, desc: activeProfile === 'farm' ? "Equine suitability" : "House size fit", weight: "10%" },
               ].map((card) => (
                 <div key={card.title} className={`p-3 border rounded-xl flex flex-col justify-between items-center text-center transition-all hover:scale-[1.03] ${getScoreBg(card.score)}`}>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-main">{card.title}</p>
@@ -218,6 +218,16 @@ export default function PropertyDetail({ property, onUpdate, onDelete, activePro
                   </div>
                 </div>
               ))}
+              {SCORE_LABELS[activeProfile].showSecondary && (
+                <div className={`p-3 border rounded-xl flex flex-col justify-between items-center text-center transition-all hover:scale-[1.03] ${getScoreBg(property.buildabilityScore)}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-main">Buildability</p>
+                  <div className="my-2 text-2xl font-black font-sans leading-none">{property.buildabilityScore}</div>
+                  <div>
+                    <p className="text-[10px] text-text-dim font-medium truncate max-w-[80px]">Infrastructure</p>
+                    <span className="text-[8px] bg-bg-dark/50 text-text-dim px-1 rounded block mt-1 font-mono">10%</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -308,7 +318,7 @@ export default function PropertyDetail({ property, onUpdate, onDelete, activePro
               <MapPin className="w-3.5 h-3.5 text-accent-dark" />
               Property Map Location
             </h3>
-            <PropertyMap property={property} />
+            <PropertyMap property={property} activeProfile={activeProfile} />
           </div>
 
           {/* Commute parameters */}

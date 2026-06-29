@@ -1,15 +1,17 @@
 import React from "react";
 import { Property } from "../types";
+import { ProfileId } from "../types";
+import { SCORE_LABELS } from "../config";
 import { CheckCircle2, MapPin, LandPlot, RefreshCw } from "lucide-react";
 
 interface PropertyCardProps {
   property: Property;
   isSelected: boolean;
   onSelect: () => void;
-  activeProfile?: import('../types').ProfileId;
+  activeProfile: ProfileId;
 }
 
-export default function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
+export default function PropertyCard({ property, isSelected, onSelect, activeProfile }: PropertyCardProps) {
   // Color code based on status
   const statusColors = {
     New: "bg-blue-950/40 text-blue-400 border-blue-900/50",
@@ -87,8 +89,29 @@ export default function PropertyCard({ property, isSelected, onSelect }: Propert
           </p>
         </div>
 
+        {/* Score pills */}
+        <div className="mt-3 flex flex-wrap gap-1.5 text-[9px] font-mono uppercase tracking-wider">
+          <span className={`px-1.5 py-0.5 rounded border ${getScoreColor(property.commuteScore)}`}>
+            {SCORE_LABELS[activeProfile].commute}: {property.commuteScore}
+          </span>
+          <span className={`px-1.5 py-0.5 rounded border ${getScoreColor(property.landScore)}`}>
+            {SCORE_LABELS[activeProfile].land}: {property.landScore}
+          </span>
+          <span className={`px-1.5 py-0.5 rounded border ${getScoreColor(property.budgetScore)}`}>
+            {SCORE_LABELS[activeProfile].budget}: {property.budgetScore}
+          </span>
+          <span className={`px-1.5 py-0.5 rounded border ${getScoreColor(SCORE_LABELS[activeProfile].primaryScore(property))}`}>
+            {SCORE_LABELS[activeProfile].primary}: {SCORE_LABELS[activeProfile].primaryScore(property)}
+          </span>
+          {SCORE_LABELS[activeProfile].showSecondary && (
+            <span className={`px-1.5 py-0.5 rounded border ${getScoreColor(property.buildabilityScore)}`}>
+              Build: {property.buildabilityScore}
+            </span>
+          )}
+        </div>
+
         {/* Footer indicators */}
-        <div className="mt-4 pt-3 border-t border-border-dark flex justify-between items-center text-[10px] text-text-dim font-mono uppercase tracking-wider">
+        <div className="mt-3 pt-3 border-t border-border-dark flex justify-between items-center text-[10px] text-text-dim font-mono uppercase tracking-wider">
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-dark"></span>
             Commute: {fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2))}

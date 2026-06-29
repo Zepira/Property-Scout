@@ -1,6 +1,8 @@
 import React, { useState, Component, ReactNode } from "react";
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useAdvancedMarkerRef } from "@vis.gl/react-google-maps";
 import { Property } from "../types";
+import { ProfileId } from "../types";
+import { PROFILE_CONFIG } from "../config";
 
 class MapErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -11,11 +13,9 @@ class MapErrorBoundary extends Component<{ children: ReactNode; fallback: ReactN
 const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
 const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY" && API_KEY.trim() !== "";
 
-const MOORABBIN = { lat: -37.947291, lng: 145.064560 };
-
 interface PropertyMapProps {
   property: Property;
-  activeProfile?: import('../types').ProfileId;
+  activeProfile?: ProfileId;
 }
 
 function PropertyPin({ color, label }: { color: string; label?: string }) {
@@ -34,7 +34,8 @@ function PropertyPin({ color, label }: { color: string; label?: string }) {
   );
 }
 
-export default function PropertyMap({ property }: PropertyMapProps) {
+export default function PropertyMap({ property, activeProfile = 'farm' }: PropertyMapProps) {
+  const workplace = PROFILE_CONFIG[activeProfile];
   const propertyCoords = property.lat && property.lng ? { lat: property.lat, lng: property.lng } : null;
   const [openMarker, setOpenMarker] = useState<"property" | "workplace" | null>(null);
   const [propMarkerRef, propMarker] = useAdvancedMarkerRef();
@@ -47,14 +48,14 @@ export default function PropertyMap({ property }: PropertyMapProps) {
         <p className="text-xs text-text-dim max-w-sm">Add GOOGLE_MAPS_PLATFORM_KEY to your .env.local to enable the map.</p>
         {propertyCoords && (
           <div className="mt-4 text-xs text-text-dim font-mono">
-            Straight-line distance: {getDistance(propertyCoords.lat, propertyCoords.lng, MOORABBIN.lat, MOORABBIN.lng).toFixed(1)} km to Moorabbin
+            Straight-line distance: {getDistance(propertyCoords.lat, propertyCoords.lng, workplace.lat, workplace.lng).toFixed(1)} km to {workplace.label}
           </div>
         )}
       </div>
     );
   }
 
-  const center = propertyCoords || MOORABBIN;
+  const center = propertyCoords || { lat: workplace.lat, lng: workplace.lng };
 
   return (
     <MapErrorBoundary fallback={
@@ -86,7 +87,7 @@ export default function PropertyMap({ property }: PropertyMapProps) {
 
           <AdvancedMarker
             ref={workMarkerRef}
-            position={MOORABBIN}
+            position={{ lat: workplace.lat, lng: workplace.lng }}
             onClick={() => setOpenMarker(prev => prev === "workplace" ? null : "workplace")}
           >
             <PropertyPin color="#3b82f6" label="💼" />
@@ -104,8 +105,7 @@ export default function PropertyMap({ property }: PropertyMapProps) {
           {openMarker === "workplace" && workMarker && (
             <InfoWindow anchor={workMarker} onCloseClick={() => setOpenMarker(null)}>
               <div className="p-1 font-sans text-xs">
-                <p className="font-semibold text-slate-900">QLM Labelmakers</p>
-                <p className="text-slate-600">12 Elna Court, Moorabbin VIC</p>
+                <p className="font-semibold text-slate-900">{workplace.label}</p>
               </div>
             </InfoWindow>
           )}
@@ -119,7 +119,7 @@ export default function PropertyMap({ property }: PropertyMapProps) {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-          <span>QLM Workspace (Moorabbin)</span>
+          <span>{workplace.label}</span>
         </div>
       </div>
     </div>
