@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { Link, Clipboard, Sparkles, PlusCircle, Globe, FileText, MapPin } from "lucide-react";
+import { ProfileId } from '../types';
 
 interface PropertyFormProps {
   onSuccess: (property: any) => void;
-  activeProfile?: import('../types').ProfileId;
+  activeProfile: ProfileId;
 }
 
-export default function PropertyForm({ onSuccess }: PropertyFormProps) {
+export default function PropertyForm({ onSuccess, activeProfile }: PropertyFormProps) {
   const [activeTab, setActiveTab] = useState<"url" | "text" | "manual">("url");
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -24,6 +25,22 @@ export default function PropertyForm({ onSuccess }: PropertyFormProps) {
   const [manualBeds, setManualBeds] = useState("");
   const [manualBaths, setManualBaths] = useState("");
   const [manualCars, setManualCars] = useState("");
+
+  // FHB-only manual fields
+  const [garages, setGarages] = useState(0);
+  const [landSqm, setLandSqm] = useState(0);
+  const [isNewBuild, setIsNewBuild] = useState(false);
+
+  // Farm-only manual checkboxes
+  const [manualDam, setManualDam] = useState(false);
+  const [manualStables, setManualStables] = useState(false);
+  const [manualHorseFacilities, setManualHorseFacilities] = useState(false);
+  const [manualWaterTanks, setManualWaterTanks] = useState(false);
+  const [manualShed, setManualShed] = useState(false);
+  const [manualPowerConnected, setManualPowerConnected] = useState(false);
+  const [manualSeptic, setManualSeptic] = useState(false);
+  const [manualVacantLand, setManualVacantLand] = useState(false);
+  const [manualExistingHouse, setManualExistingHouse] = useState(false);
 
   const funnyMessages = [
     "Contacting Property Scout satellite archives...",
@@ -147,12 +164,25 @@ export default function PropertyForm({ onSuccess }: PropertyFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          profileId: activeProfile,
           address: manualAddress,
           price: Number(manualPrice),
           landSize: Number(manualLandSize),
           bedrooms: Number(manualBeds) || 0,
           bathrooms: Number(manualBaths) || 0,
           carSpaces: Number(manualCars) || 0,
+          garages,
+          landSqm,
+          isNewBuild,
+          dam: manualDam,
+          stables: manualStables,
+          horseFacilities: manualHorseFacilities,
+          waterTanks: manualWaterTanks,
+          shed: manualShed,
+          powerConnected: manualPowerConnected,
+          septic: manualSeptic,
+          vacantLand: manualVacantLand,
+          existingHouse: manualExistingHouse,
         }),
       });
       const data = await response.json();
@@ -171,6 +201,18 @@ export default function PropertyForm({ onSuccess }: PropertyFormProps) {
       setManualBeds("");
       setManualBaths("");
       setManualCars("");
+      setGarages(0);
+      setLandSqm(0);
+      setIsNewBuild(false);
+      setManualDam(false);
+      setManualStables(false);
+      setManualHorseFacilities(false);
+      setManualWaterTanks(false);
+      setManualShed(false);
+      setManualPowerConnected(false);
+      setManualSeptic(false);
+      setManualVacantLand(false);
+      setManualExistingHouse(false);
       onSuccess(savedData);
     } catch (err: any) {
       console.error(err);
@@ -370,7 +412,7 @@ export default function PropertyForm({ onSuccess }: PropertyFormProps) {
 
             <div>
               <label className="text-[10px] font-bold text-text-dim uppercase tracking-wider block mb-1">
-                Land Size (Acres)
+                Land Size ({activeProfile === 'firsthome' ? 'm²' : 'acres'})
               </label>
               <input
                 type="number"
@@ -419,6 +461,77 @@ export default function PropertyForm({ onSuccess }: PropertyFormProps) {
               />
             </div>
           </div>
+
+          {/* Farm-only fields */}
+          {activeProfile === 'farm' && (
+            <div className="space-y-2 pt-1">
+              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider">Farm Features</p>
+              <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+                {(
+                  [
+                    ['manualDam', 'Dam', manualDam, setManualDam],
+                    ['manualStables', 'Stables', manualStables, setManualStables],
+                    ['manualHorseFacilities', 'Horse Facilities', manualHorseFacilities, setManualHorseFacilities],
+                    ['manualWaterTanks', 'Water Tanks', manualWaterTanks, setManualWaterTanks],
+                    ['manualShed', 'Shed', manualShed, setManualShed],
+                    ['manualPowerConnected', 'Power Connected', manualPowerConnected, setManualPowerConnected],
+                    ['manualSeptic', 'Septic', manualSeptic, setManualSeptic],
+                    ['manualVacantLand', 'Vacant Land', manualVacantLand, setManualVacantLand],
+                    ['manualExistingHouse', 'Existing House', manualExistingHouse, setManualExistingHouse],
+                  ] as [string, string, boolean, React.Dispatch<React.SetStateAction<boolean>>][]
+                ).map(([key, label, value, setter]) => (
+                  <label key={key} className="flex items-center gap-2 text-sm text-text-main cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={e => setter(e.target.checked)}
+                      className="w-4 h-4 accent-accent-dark"
+                    />
+                    <span className="text-xs text-text-dim">{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* FHB-only fields */}
+          {activeProfile === 'firsthome' && (
+            <div className="space-y-3 pt-1">
+              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider">First Home Buyer Details</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-text-dim block">
+                  Garages
+                  <input
+                    type="number"
+                    min={0}
+                    max={6}
+                    value={garages}
+                    onChange={e => setGarages(Number(e.target.value))}
+                    className="mt-1 w-full bg-bg-dark border border-border-dark rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-accent-dark"
+                  />
+                </label>
+                <label className="text-xs text-text-dim block">
+                  Land size (m²)
+                  <input
+                    type="number"
+                    min={0}
+                    value={landSqm}
+                    onChange={e => setLandSqm(Number(e.target.value))}
+                    className="mt-1 w-full bg-bg-dark border border-border-dark rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-accent-dark"
+                  />
+                </label>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-text-main cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isNewBuild}
+                  onChange={e => setIsNewBuild(e.target.checked)}
+                  className="w-4 h-4 accent-accent-dark"
+                />
+                New build <span className="text-xs text-text-dim">(affects $10k FHOG eligibility)</span>
+              </label>
+            </div>
+          )}
 
           <button
             type="submit"
