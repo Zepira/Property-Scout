@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Property, PropertyStatus } from "./types";
+import { Property, PropertyStatus, Profile, ProfileId } from "./types";
 import PropertyCard from "./components/PropertyCard";
 import PropertyDetail from "./components/PropertyDetail";
 import PropertyForm from "./components/PropertyForm";
 import ComparisonView from "./components/ComparisonView";
+import { ProfileSelector } from "./components/ProfileSelector";
 import { 
   Building2, LandPlot, Moon, CircleAlert, Compass, Search, 
   ChevronsUpDown, Filter, Scale, Plus, RefreshCw, X, ArrowUpRight 
@@ -17,17 +18,27 @@ export default function App() {
   const [comparisonIds, setComparisonIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<ProfileId>(() =>
+    (localStorage.getItem('property-scout-profile') as ProfileId) ?? 'farm'
+  );
+
   // Filters & Sorting state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<PropertyStatus | "All">("All");
   const [sortBy, setSortBy] = useState<"commute" | "score" | "price_asc" | "price_desc" | "acres">("commute");
 
-  // Load properties on mount, then poll every 5s to pick up extension imports
+  // Fetch profiles once on mount
   useEffect(() => {
-    loadProperties();
+    fetch('/api/profiles').then(r => r.json()).then(setProfiles);
+  }, []);
+
+  // Load properties on mount and when profile changes, then poll every 5s to pick up extension imports
+  useEffect(() => {
+    loadProperties(activeProfile);
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/properties");
+        const res = await fetch(`/api/properties?profile=${activeProfile}`);
         const data = await res.json();
         setProperties((prev) => {
           if (data.length !== prev.length) {
@@ -40,22 +51,33 @@ export default function App() {
       } catch {}
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeProfile]);
 
-  const loadProperties = async () => {
+  const loadProperties = async (profile: ProfileId) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/properties");
+      const res = await fetch(`/api/properties?profile=${profile}`);
       const data = await res.json();
       setProperties(data);
-      if (data.length > 0 && !selectedPropertyId) {
+      if (data.length > 0) {
         setSelectedPropertyId(data[0].id);
+      } else {
+        setSelectedPropertyId(null);
       }
     } catch (error) {
-      console.error("Failed to load properties", error);
+      console.error('Failed to load properties', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProfileChange = (profileId: ProfileId) => {
+    localStorage.setItem('property-scout-profile', profileId);
+    setActiveProfile(profileId);
+    setSelectedPropertyId(null);
+    setComparisonIds([]);
+    setShowComparison(false);
+    setShowAddForm(false);
   };
 
   const handlePropertyCreated = (newProperty: Property) => {
@@ -211,7 +233,16 @@ export default function App() {
         
         {/* Left Column - Properties Panel (Column span 4) */}
         <div className="lg:col-span-4 space-y-4 flex flex-col h-[calc(100vh-140px)] sticky top-20">
-          
+
+          {/* Profile Selector */}
+          <div className="bg-card-dark border border-border-dark rounded-xl shadow-md overflow-hidden">
+            <ProfileSelector
+              profiles={profiles}
+              activeProfile={activeProfile}
+              onChange={handleProfileChange}
+            />
+          </div>
+
           {/* Header Search and Filter */}
           <div className="bg-card-dark p-4 border border-border-dark rounded-xl shadow-md space-y-3">
             <div className="relative">
@@ -297,6 +328,7 @@ export default function App() {
                         setShowAddForm(false);
                         setShowComparison(false);
                       }}
+                      activeProfile={activeProfile}
                     />
                     {/* Compare overlay button */}
                     <button
@@ -334,7 +366,7 @@ export default function App() {
                   Cancel
                 </button>
               </div>
-              <PropertyForm onSuccess={handlePropertyCreated} />
+              <PropertyForm onSuccess={handlePropertyCreated} activeProfile={activeProfile} />
             </div>
           )}
 
@@ -353,13 +385,14 @@ export default function App() {
                   Back to Details
                 </button>
               </div>
-              <ComparisonView 
-                properties={comparisonProperties} 
+              <ComparisonView
+                properties={comparisonProperties}
                 onSelectProperty={(id) => {
                   setSelectedPropertyId(id);
                   setShowComparison(false);
                   setShowAddForm(false);
                 }}
+                activeProfile={activeProfile}
               />
             </div>
           )}
@@ -370,6 +403,7 @@ export default function App() {
               property={selectedProperty}
               onUpdate={handlePropertyUpdated}
               onDelete={handlePropertyDeleted}
+              activeProfile={activeProfile}
             />
           )}
 

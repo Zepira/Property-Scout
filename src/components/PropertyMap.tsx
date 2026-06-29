@@ -15,6 +15,7 @@ const MOORABBIN = { lat: -37.947291, lng: 145.064560 };
 
 interface PropertyMapProps {
   property: Property;
+  activeProfile?: import('../types').ProfileId;
 }
 
 function PropertyPin({ color, label }: { color: string; label?: string }) {

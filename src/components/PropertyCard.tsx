@@ -6,6 +6,7 @@ interface PropertyCardProps {
   property: Property;
   isSelected: boolean;
   onSelect: () => void;
+  activeProfile?: import('../types').ProfileId;
 }
 
 export default function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {

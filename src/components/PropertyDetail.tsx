@@ -12,6 +12,7 @@ interface PropertyDetailProps {
   property: Property;
   onUpdate: (updated: Property) => void;
   onDelete: (id: number) => void;
+  activeProfile?: import('../types').ProfileId;
 }
 
 export default function PropertyDetail({ property, onUpdate, onDelete }: PropertyDetailProps) {

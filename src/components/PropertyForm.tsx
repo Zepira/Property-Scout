@@ -3,6 +3,7 @@ import { Link, Clipboard, Sparkles, PlusCircle, Globe, FileText, MapPin } from "
 
 interface PropertyFormProps {
   onSuccess: (property: any) => void;
+  activeProfile?: import('../types').ProfileId;
 }
 
 export default function PropertyForm({ onSuccess }: PropertyFormProps) {

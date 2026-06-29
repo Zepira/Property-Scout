@@ -5,6 +5,7 @@ import { ArrowUpRight, Scale, Check, Landmark, LandPlot, Moon, CircleAlert } fro
 interface ComparisonViewProps {
   properties: Property[];
   onSelectProperty: (id: number) => void;
+  activeProfile?: import('../types').ProfileId;
 }
 
 const fmtMins = (m: number) => { const h = Math.floor(m / 60); const r = m % 60; return h > 0 ? `${h}h ${r}m` : `${r}m`; };
