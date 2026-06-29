@@ -1,266 +1,233 @@
-import fs from "fs/promises";
-import path from "path";
+import { open, Database } from 'sqlite';
+import sqlite3 from 'sqlite3';
+import fs from 'fs/promises';
+import { existsSync } from 'fs';
+import path from 'path';
 
-// Define a unified interface for database actions
 export interface DatabaseInterface {
   all(query: string, params?: any[]): Promise<any[]>;
   get(query: string, params?: any[]): Promise<any | undefined>;
   run(query: string, params?: any[]): Promise<{ lastID?: number; changes?: number }>;
 }
 
-let dbInstance: DatabaseInterface | null = null;
-
-// Initial high-quality Victorian seed properties
-const SEED_PROPERTIES = [
-  {
-    url: "https://www.realestate.com.au/property-house-vic-emerald-123456789",
-    address: "85 Emerald-Monbulk Road, Emerald VIC 3782",
-    price: 890000,
-    landSize: 5.5,
-    bedrooms: 4,
-    bathrooms: 2,
-    carSpaces: 3,
-    description: "Superb rural lifestyle property perfect for horse lovers. Nestled in the stunning Dandenong Ranges, this beautiful 5.5-acre property features cleared pastures, 2 fenced paddocks, high-quality horse fencing, water tanks, stables and a large machinery shed. The spacious 4-bedroom family residence boasts floor-to-ceiling windows with panoramic forest views, a cozy wood fireplace, and modern amenities including connected mains power and an efficient septic system. Only minutes from Emerald township, local schools, and cafes, with a scenic drive to Moorabbin.",
-    agentName: "Sarah Jenkins",
-    agentAgency: "Dandenong Ranges Real Estate",
-    agentPhone: "+61 412 345 678",
-    images: ["https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop"],
-    lat: -37.8546,
-    lng: 145.4371,
-    existingHouse: 1,
-    vacantLand: 0,
-    shed: 1,
-    dam: 1,
-    waterTanks: 1,
-    stables: 1,
-    horseFacilities: 1,
-    powerConnected: 1,
-    septic: 1,
-    bushfireMentions: "Property falls under Bushfire Management Overlay (BMO). Appropriate clearing zones around home are well-maintained.",
-    buildabilityMentions: "Slight slope but clear build footprint. Large existing house in pristine structural condition.",
-    planningReferences: "Zoned Green Wedge Zone (GWZ) which limits subdivision but fully permits agriculture and residential improvements. Pre-approved permit for the stable block.",
-    nativeVegetationReferences: "Lush native timber along property borders. Front acreage is cleared pasture, preserving native trees.",
-    commuteScore: 75,
-    commuteTimeAM: 48,
-    commuteTimePM: 56,
-    landScore: 60,
-    budgetScore: 78,
-    horseScore: 95,
-    buildabilityScore: 100,
-    overallScore: 79,
-    status: "Shortlisted",
-    notes: "Outstanding horse setup with stables and dams. Family home is ready-to-move-in. Commute to Moorabbin is very reasonable at 48-56 mins off-peak."
-  },
-  {
-    url: "https://www.domain.com.au/220-cardinia-road-pakenham-vic-3810",
-    address: "220 Cardinia Road, Pakenham VIC 3810",
-    price: 720000,
-    landSize: 12.0,
-    bedrooms: 0,
-    bathrooms: 0,
-    carSpaces: 0,
-    description: "Attention equine enthusiasts and builders! Premium 12-acre vacant land parcel with spectacular panoramic views overlooking Cardinia Shire. Totally clear, rich fertile soil ideal for grazing, crop growing, or establishing professional horse facilities. Fully fenced boundary with secure gates. Includes a massive 3-bay steel workshop/shed and a deep catchment dam. Mains power is available directly at the boundary gate ready for connection. Needs septic installation if building. Private gate access, quiet country road.",
-    agentName: "Michael Chang",
-    agentAgency: "Scenic Outpost Sellers",
-    agentPhone: "+61 498 765 432",
-    images: ["https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1200&auto=format&fit=crop"],
-    lat: -38.0712,
-    lng: 145.4856,
-    existingHouse: 0,
-    vacantLand: 1,
-    shed: 1,
-    dam: 1,
-    waterTanks: 0,
-    stables: 0,
-    horseFacilities: 1,
-    powerConnected: 0,
-    septic: 0,
-    bushfireMentions: "None. Low risk pasture zone.",
-    buildabilityMentions: "Flat, dry building envelope with excellent soil profile and no restrictive easements. Ideal for building a dream ranch.",
-    planningReferences: "Zoned Rural Conservation (RCZ). Ready for house construction (STCA) with pristine building zones designated by shire council.",
-    nativeVegetationReferences: "Clear pasture land with zero heavy vegetation clearance restrictions or tree protection overlays.",
-    commuteScore: 75,
-    commuteTimeAM: 45,
-    commuteTimePM: 52,
-    landScore: 78,
-    budgetScore: 100,
-    horseScore: 70,
-    buildabilityScore: 50,
-    overallScore: 79,
-    status: "Interested",
-    notes: "Superb vacant block with huge land value for under 800k. Needs septic and water tanks, but features outstanding soil and flat build envelopes."
-  }
-];
-
-class JSONDatabase implements DatabaseInterface {
-  private filePath: string;
-  private data: any[] = [];
-
-  constructor() {
-    this.filePath = path.join(process.cwd(), "properties_db.json");
-  }
-
-  async init() {
-    try {
-      const content = await fs.readFile(this.filePath, "utf-8");
-      this.data = JSON.parse(content);
-    } catch {
-      // Initialize with seed properties
-      this.data = SEED_PROPERTIES.map((p, idx) => ({ id: idx + 1, ...p, images: JSON.stringify(p.images) }));
-      await this.save();
-    }
-  }
-
-  private async save() {
-    await fs.writeFile(this.filePath, JSON.stringify(this.data, null, 2), "utf-8");
-  }
+class SQLiteDatabase implements DatabaseInterface {
+  constructor(private db: Database) {}
 
   async all(query: string, params: any[] = []): Promise<any[]> {
-    if (query.toLowerCase().includes("order by id desc")) {
-      return [...this.data].sort((a, b) => b.id - a.id);
-    }
-    return [...this.data];
+    return this.db.all(query, params);
   }
 
   async get(query: string, params: any[] = []): Promise<any | undefined> {
-    if (query.toLowerCase().includes("where url = ?")) {
-      const normalize = (u: string) => {
-        try { const parsed = new URL(u); return parsed.origin + parsed.pathname; } catch { return u; }
-      };
-      const target = normalize(params[0] || "");
-      return this.data.find((p) => normalize(p.url || "") === target);
-    }
-    const id = params[0];
-    return this.data.find((p) => p.id === Number(id));
+    return this.db.get(query, params);
   }
 
-  async run(query: string, params: any[] = []): Promise<{ lastID: number }> {
-    const isInsert = query.toLowerCase().includes("insert into");
-    const isUpdate = query.toLowerCase().includes("update properties");
-    const isDelete = query.toLowerCase().includes("delete from");
+  async run(query: string, params: any[] = []): Promise<{ lastID?: number; changes?: number }> {
+    return this.db.run(query, params);
+  }
+}
 
-    if (isInsert) {
-      const nextId = this.data.length > 0 ? Math.max(...this.data.map((p) => p.id)) + 1 : 1;
-      const newProp = {
-        id: nextId,
-        url: params[0] || "",
-        address: params[1],
-        price: Number(params[2]) || 0,
-        landSize: Number(params[3]) || 0,
-        bedrooms: Number(params[4]) || 0,
-        bathrooms: Number(params[5]) || 0,
-        carSpaces: Number(params[6]) || 0,
-        description: params[7] || "",
-        agentName: params[8] || "",
-        agentAgency: params[9] || "",
-        agentPhone: params[10] || "",
-        images: params[11] || "[]",
-        lat: params[12] != null ? Number(params[12]) : null,
-        lng: params[13] != null ? Number(params[13]) : null,
-        existingHouse: Number(params[14]) || 0,
-        vacantLand: Number(params[15]) || 0,
-        shed: Number(params[16]) || 0,
-        dam: Number(params[17]) || 0,
-        waterTanks: Number(params[18]) || 0,
-        stables: Number(params[19]) || 0,
-        horseFacilities: Number(params[20]) || 0,
-        powerConnected: Number(params[21]) || 0,
-        septic: Number(params[22]) || 0,
-        bushfireMentions: params[23] || "",
-        buildabilityMentions: params[24] || "",
-        planningReferences: params[25] || "",
-        nativeVegetationReferences: params[26] || "",
-        commuteScore: Number(params[27]) || 0,
-        commuteTimeAM: Number(params[28]) || 0,
-        commuteTimePM: Number(params[29]) || 0,
-        landScore: Number(params[30]) || 0,
-        budgetScore: Number(params[31]) || 0,
-        horseScore: Number(params[32]) || 0,
-        buildabilityScore: Number(params[33]) || 0,
-        overallScore: Number(params[34]) || 0,
-        status: params[35] || "New",
-        notes: params[36] || "",
-        createdAt: new Date().toISOString()
-      };
-      this.data.push(newProp);
-      await this.save();
-      return { lastID: nextId };
+let dbInstance: DatabaseInterface | null = null;
+
+async function initSchema(db: Database): Promise<void> {
+  await db.exec(`
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE IF NOT EXISTS profiles (
+      id   TEXT PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS properties (
+      id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_id                TEXT NOT NULL DEFAULT 'farm' REFERENCES profiles(id),
+      url                       TEXT NOT NULL DEFAULT '',
+      address                   TEXT,
+      price                     INTEGER DEFAULT 0,
+      landSize                  REAL DEFAULT 0,
+      bedrooms                  INTEGER DEFAULT 0,
+      bathrooms                 INTEGER DEFAULT 0,
+      carSpaces                 INTEGER DEFAULT 0,
+      garages                   INTEGER DEFAULT 0,
+      landSqm                   INTEGER DEFAULT 0,
+      isNewBuild                INTEGER NOT NULL DEFAULT 0,
+      description               TEXT DEFAULT '',
+      agentName                 TEXT DEFAULT '',
+      agentAgency               TEXT DEFAULT '',
+      agentPhone                TEXT DEFAULT '',
+      images                    TEXT DEFAULT '[]',
+      lat                       REAL,
+      lng                       REAL,
+      existingHouse             INTEGER NOT NULL DEFAULT 0,
+      vacantLand                INTEGER NOT NULL DEFAULT 0,
+      shed                      INTEGER NOT NULL DEFAULT 0,
+      dam                       INTEGER NOT NULL DEFAULT 0,
+      waterTanks                INTEGER NOT NULL DEFAULT 0,
+      stables                   INTEGER NOT NULL DEFAULT 0,
+      horseFacilities           INTEGER NOT NULL DEFAULT 0,
+      powerConnected            INTEGER NOT NULL DEFAULT 0,
+      septic                    INTEGER NOT NULL DEFAULT 0,
+      bushfireMentions          TEXT DEFAULT '',
+      buildabilityMentions      TEXT DEFAULT '',
+      planningReferences        TEXT DEFAULT '',
+      nativeVegetationReferences TEXT DEFAULT '',
+      commuteScore              INTEGER DEFAULT 0,
+      commuteTimeAM             INTEGER DEFAULT 0,
+      commuteTimePM             INTEGER DEFAULT 0,
+      landScore                 INTEGER DEFAULT 0,
+      budgetScore               INTEGER DEFAULT 0,
+      horseScore                INTEGER DEFAULT 0,
+      buildabilityScore         INTEGER DEFAULT 0,
+      houseSizeScore            INTEGER DEFAULT 0,
+      overallScore              INTEGER DEFAULT 0,
+      status                    TEXT NOT NULL DEFAULT 'New',
+      notes                     TEXT DEFAULT '',
+      createdAt                 TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  await db.run(`INSERT OR IGNORE INTO profiles VALUES ('farm', 'Farm Property')`);
+  await db.run(`INSERT OR IGNORE INTO profiles VALUES ('firsthome', 'First Home Buyer')`);
+}
+
+async function migrateLegacyJson(db: Database): Promise<void> {
+  const legacyPath = path.join(process.cwd(), 'properties_db.json');
+  if (!existsSync(legacyPath)) return;
+
+  const existing = await db.get<{ n: number }>(`SELECT COUNT(*) as n FROM properties`);
+  if (existing && existing.n > 0) return;
+
+  try {
+    const raw = await fs.readFile(legacyPath, 'utf-8');
+    const props = JSON.parse(raw) as any[];
+    for (const p of props) {
+      await db.run(
+        `INSERT INTO properties (
+          profile_id, url, address, price, landSize, bedrooms, bathrooms, carSpaces,
+          description, agentName, agentAgency, agentPhone, images, lat, lng,
+          existingHouse, vacantLand, shed, dam, waterTanks, stables, horseFacilities,
+          powerConnected, septic, bushfireMentions, buildabilityMentions,
+          planningReferences, nativeVegetationReferences,
+          commuteScore, commuteTimeAM, commuteTimePM, landScore, budgetScore,
+          horseScore, buildabilityScore, houseSizeScore, overallScore, status, notes, createdAt
+        ) VALUES (
+          'farm', ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, 0, ?, ?, ?, ?
+        )`,
+        [
+          p.url || '', p.address, p.price || 0, p.landSize || 0, p.bedrooms || 0, p.bathrooms || 0, p.carSpaces || 0,
+          p.description || '', p.agentName || '', p.agentAgency || '', p.agentPhone || '',
+          typeof p.images === 'string' ? p.images : JSON.stringify(p.images || []),
+          p.lat ?? null, p.lng ?? null,
+          p.existingHouse ? 1 : 0, p.vacantLand ? 1 : 0, p.shed ? 1 : 0, p.dam ? 1 : 0,
+          p.waterTanks ? 1 : 0, p.stables ? 1 : 0, p.horseFacilities ? 1 : 0,
+          p.powerConnected ? 1 : 0, p.septic ? 1 : 0,
+          p.bushfireMentions || '', p.buildabilityMentions || '',
+          p.planningReferences || '', p.nativeVegetationReferences || '',
+          p.commuteScore || 0, p.commuteTimeAM || 0, p.commuteTimePM || 0,
+          p.landScore || 0, p.budgetScore || 0, p.horseScore || 0, p.buildabilityScore || 0,
+          p.overallScore || 0, p.status || 'New', p.notes || '',
+          p.createdAt || new Date().toISOString(),
+        ]
+      );
     }
+    await fs.rename(legacyPath, legacyPath + '.bak');
+    console.log(`Migrated ${props.length} properties from JSON to SQLite`);
+  } catch (e) {
+    console.error('Legacy migration failed:', e);
+  }
+}
 
-    if (isUpdate) {
-      const id = params[params.length - 1];
-      const index = this.data.findIndex((p) => p.id === Number(id));
-      if (index !== -1) {
-        this.data[index] = {
-          ...this.data[index],
-          url: params[0] || "",
-          address: params[1],
-          price: Number(params[2]) || 0,
-          landSize: Number(params[3]) || 0,
-          bedrooms: Number(params[4]) || 0,
-          bathrooms: Number(params[5]) || 0,
-          carSpaces: Number(params[6]) || 0,
-          description: params[7] || "",
-          agentName: params[8] || "",
-          agentAgency: params[9] || "",
-          agentPhone: params[10] || "",
-          images: params[11] || "[]",
-          lat: params[12] != null ? Number(params[12]) : null,
-          lng: params[13] != null ? Number(params[13]) : null,
-          existingHouse: Number(params[14]) || 0,
-          vacantLand: Number(params[15]) || 0,
-          shed: Number(params[16]) || 0,
-          dam: Number(params[17]) || 0,
-          waterTanks: Number(params[18]) || 0,
-          stables: Number(params[19]) || 0,
-          horseFacilities: Number(params[20]) || 0,
-          powerConnected: Number(params[21]) || 0,
-          septic: Number(params[22]) || 0,
-          bushfireMentions: params[23] || "",
-          buildabilityMentions: params[24] || "",
-          planningReferences: params[25] || "",
-          nativeVegetationReferences: params[26] || "",
-          commuteScore: Number(params[27]) || 0,
-          commuteTimeAM: Number(params[28]) || 0,
-          commuteTimePM: Number(params[29]) || 0,
-          landScore: Number(params[30]) || 0,
-          budgetScore: Number(params[31]) || 0,
-          horseScore: Number(params[32]) || 0,
-          buildabilityScore: Number(params[33]) || 0,
-          overallScore: Number(params[34]) || 0,
-          status: params[35] || "New",
-          notes: params[36] || ""
-        };
-        await this.save();
-      }
-      return { lastID: Number(id) };
-    }
+// Seed the two hard-coded example properties into the farm profile if DB is empty
+async function seedFarmProperties(db: Database): Promise<void> {
+  const existing = await db.get<{ n: number }>(`SELECT COUNT(*) as n FROM properties WHERE profile_id = 'farm'`);
+  if (existing && existing.n > 0) return;
 
-    if (isDelete) {
-      if (params.length === 0) {
-        this.data = [];
-        await this.save();
-        return { lastID: 0 };
-      }
-      const id = params[0];
-      this.data = this.data.filter((p) => p.id !== Number(id));
-      await this.save();
-      return { lastID: Number(id) };
-    }
+  const seeds = [
+    {
+      url: 'https://www.realestate.com.au/property-house-vic-emerald-123456789',
+      address: '85 Emerald-Monbulk Road, Emerald VIC 3782',
+      price: 890000, landSize: 5.5, bedrooms: 4, bathrooms: 2, carSpaces: 3,
+      description: 'Superb rural lifestyle property perfect for horse lovers.',
+      agentName: 'Sarah Jenkins', agentAgency: 'Dandenong Ranges Real Estate', agentPhone: '+61 412 345 678',
+      images: JSON.stringify(['https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop']),
+      lat: -37.8546, lng: 145.4371,
+      existingHouse: 1, vacantLand: 0, shed: 1, dam: 1, waterTanks: 1, stables: 1,
+      horseFacilities: 1, powerConnected: 1, septic: 1,
+      bushfireMentions: 'Property falls under Bushfire Management Overlay (BMO).',
+      buildabilityMentions: 'Slight slope but clear build footprint.',
+      planningReferences: 'Zoned Green Wedge Zone (GWZ).',
+      nativeVegetationReferences: 'Lush native timber along property borders.',
+      commuteScore: 75, commuteTimeAM: 48, commuteTimePM: 56,
+      landScore: 60, budgetScore: 78, horseScore: 95, buildabilityScore: 100,
+      houseSizeScore: 0, overallScore: 79, status: 'Shortlisted',
+      notes: 'Outstanding horse setup. Commute ~48-56 mins.',
+    },
+    {
+      url: 'https://www.domain.com.au/220-cardinia-road-pakenham-vic-3810',
+      address: '220 Cardinia Road, Pakenham VIC 3810',
+      price: 720000, landSize: 12.0, bedrooms: 0, bathrooms: 0, carSpaces: 0,
+      description: 'Premium 12-acre vacant land parcel.',
+      agentName: 'Michael Chang', agentAgency: 'Scenic Outpost Sellers', agentPhone: '+61 498 765 432',
+      images: JSON.stringify(['https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1200&auto=format&fit=crop']),
+      lat: -38.0712, lng: 145.4856,
+      existingHouse: 0, vacantLand: 1, shed: 1, dam: 1, waterTanks: 0, stables: 0,
+      horseFacilities: 1, powerConnected: 0, septic: 0,
+      bushfireMentions: 'None. Low risk pasture zone.',
+      buildabilityMentions: 'Flat, dry building envelope.',
+      planningReferences: 'Zoned Rural Conservation (RCZ).',
+      nativeVegetationReferences: 'Clear pasture land.',
+      commuteScore: 75, commuteTimeAM: 45, commuteTimePM: 52,
+      landScore: 78, budgetScore: 100, horseScore: 70, buildabilityScore: 50,
+      houseSizeScore: 0, overallScore: 79, status: 'Interested',
+      notes: 'Superb vacant block. Needs septic and water.',
+    },
+  ];
 
-    return { lastID: 0 };
+  for (const s of seeds) {
+    await db.run(
+      `INSERT INTO properties (
+        profile_id, url, address, price, landSize, bedrooms, bathrooms, carSpaces,
+        description, agentName, agentAgency, agentPhone, images, lat, lng,
+        existingHouse, vacantLand, shed, dam, waterTanks, stables, horseFacilities,
+        powerConnected, septic, bushfireMentions, buildabilityMentions,
+        planningReferences, nativeVegetationReferences,
+        commuteScore, commuteTimeAM, commuteTimePM, landScore, budgetScore,
+        horseScore, buildabilityScore, houseSizeScore, overallScore, status, notes
+      ) VALUES (
+        'farm', ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?
+      )`,
+      [
+        s.url, s.address, s.price, s.landSize, s.bedrooms, s.bathrooms, s.carSpaces,
+        s.description, s.agentName, s.agentAgency, s.agentPhone, s.images, s.lat, s.lng,
+        s.existingHouse, s.vacantLand, s.shed, s.dam, s.waterTanks, s.stables, s.horseFacilities,
+        s.powerConnected, s.septic, s.bushfireMentions, s.buildabilityMentions,
+        s.planningReferences, s.nativeVegetationReferences,
+        s.commuteScore, s.commuteTimeAM, s.commuteTimePM, s.landScore, s.budgetScore,
+        s.horseScore, s.buildabilityScore, s.houseSizeScore, s.overallScore, s.status, s.notes,
+      ]
+    );
   }
 }
 
 export async function getDb(): Promise<DatabaseInterface> {
-  if (dbInstance) {
-    return dbInstance;
-  }
+  if (dbInstance) return dbInstance;
 
-  // Use the ultra-robust JSONDatabase directly to completely sidestep GLIBC binary load errors in sandboxed containers.
-  const jsonDb = new JSONDatabase();
-  await jsonDb.init();
-  dbInstance = jsonDb;
+  const db = await open({ filename: './properties.db', driver: sqlite3.Database });
+  await initSchema(db);
+  await migrateLegacyJson(db);
+  await seedFarmProperties(db);
 
+  dbInstance = new SQLiteDatabase(db);
   return dbInstance;
 }
