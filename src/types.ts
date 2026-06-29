@@ -1,7 +1,15 @@
+export type ProfileId = 'farm' | 'firsthome';
+
+export interface Profile {
+  id: ProfileId;
+  name: string;
+}
+
 export type PropertyStatus = "New" | "Interested" | "Inspecting" | "Shortlisted" | "Rejected" | "Purchased";
 
 export interface Property {
   id: number;
+  profileId: ProfileId;
   url: string;
   address: string;
   price: number;
@@ -9,6 +17,9 @@ export interface Property {
   bedrooms: number;
   bathrooms: number;
   carSpaces: number;
+  garages?: number;       // FHB: number of garage bays
+  landSqm?: number;       // FHB: land size in square metres
+  isNewBuild?: boolean;   // FHB: affects FHOG eligibility
   description: string;
   agentName: string;
   agentAgency: string;
@@ -40,6 +51,7 @@ export interface Property {
   budgetScore: number;
   horseScore: number;
   buildabilityScore: number;
+  houseSizeScore: number; // FHB only; always 0 for farm profile
   overallScore: number;
 
   // Manual Status & Custom Notes
