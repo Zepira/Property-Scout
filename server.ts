@@ -6,7 +6,8 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { getDb } from "./server/db.js";
 import { extractPropertyFromUrl, extractPropertyFromText } from "./server/analyzer.js";
-import { calculateScores, geocodeAddress, fetchCommuteTimes } from "./server/scoring.js";
+import type { ProfileId } from './src/types.js';
+import { calculateScores, calculateFHBScores, geocodeAddress, fetchCommuteTimes, PROFILE_CONFIG } from "./server/scoring.js";
 
 async function startServer() {
   const app = express();
@@ -29,14 +30,30 @@ async function startServer() {
   // Initialize SQLite database
   const db = await getDb();
 
+  // API ROUTE: Get all profiles
+  app.get('/api/profiles', async (_req, res) => {
+    try {
+      const profiles = await db.all(`SELECT id, name FROM profiles ORDER BY id`);
+      res.json(profiles);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // API ROUTE: Get all properties
   app.get("/api/properties", async (req, res) => {
     try {
-      const properties = await db.all("SELECT * FROM properties ORDER BY id DESC");
-      // Map JSON fields back to objects
-      const parsedProperties = properties.map((p) => ({
+      const profileId: ProfileId = (req.query.profile as ProfileId) || 'farm';
+      if (profileId !== 'farm' && profileId !== 'firsthome') {
+        return res.status(400).json({ error: 'Invalid profile' });
+      }
+      const properties = await db.all(
+        `SELECT * FROM properties WHERE profile_id = ? ORDER BY id DESC`,
+        [profileId]
+      );
+      const parsed = properties.map((p) => ({
         ...p,
-        images: JSON.parse(p.images || "[]"),
+        images: JSON.parse(p.images || '[]'),
         existingHouse: p.existingHouse === 1,
         vacantLand: p.vacantLand === 1,
         shed: p.shed === 1,
@@ -46,8 +63,9 @@ async function startServer() {
         horseFacilities: p.horseFacilities === 1,
         powerConnected: p.powerConnected === 1,
         septic: p.septic === 1,
+        isNewBuild: p.isNewBuild === 1,
       }));
-      res.json(parsedProperties);
+      res.json(parsed);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -72,6 +90,7 @@ async function startServer() {
         horseFacilities: property.horseFacilities === 1,
         powerConnected: property.powerConnected === 1,
         septic: property.septic === 1,
+        isNewBuild: property.isNewBuild === 1,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -81,8 +100,13 @@ async function startServer() {
   // API ROUTE: Scrape property listing URL or manual processing
   app.post("/api/scrape", async (req, res) => {
     const { url, htmlContent, browserImages, descriptionText, address, price, landSize, bedrooms, bathrooms, carSpaces } = req.body;
-    
+
     try {
+      const profileId: ProfileId = req.body.profileId || 'farm';
+      const garages = Number(req.body.garages) || 0;
+      const landSqm = Number(req.body.landSqm) || 0;
+      const isNewBuild = Boolean(req.body.isNewBuild);
+
       let extracted: any;
 
       if (url && (url.includes("domain.com.au") || url.includes("realestate.com.au") || url.startsWith("http"))) {
@@ -183,53 +207,67 @@ async function startServer() {
       }
 
       // Let's query Driving/Traffic commute times using Maps API if Key exists
+      const dest = PROFILE_CONFIG[profileId];
       let commuteTimeAM = 0;
       let commuteTimePM = 0;
       if (lat && lng && mapKey) {
-        const commute = await fetchCommuteTimes(lat, lng, mapKey);
+        const commute = await fetchCommuteTimes(lat, lng, mapKey, dest.lat, dest.lng);
         if (commute) {
           commuteTimeAM = commute.timeAM;
           commuteTimePM = commute.timePM;
         }
       }
 
-      // Calculate Scores
-      const propertyFeatures = {
-        landSize: extracted.landSize || 0,
-        price: extracted.price || 0,
-        existingHouse: extracted.existingHouse,
-        vacantLand: extracted.vacantLand,
-        shed: extracted.shed,
-        dam: extracted.dam,
-        waterTanks: extracted.waterTanks,
-        stables: extracted.stables,
-        horseFacilities: extracted.horseFacilities,
-        powerConnected: extracted.powerConnected,
-        septic: extracted.septic,
-      };
-
-      const scores = calculateScores(propertyFeatures, lat && lng ? { lat, lng } : null);
-
-      if (commuteTimeAM > 0 && commuteTimePM > 0) {
-        scores.commuteTimeAM = commuteTimeAM;
-        scores.commuteTimePM = commuteTimePM;
-        // Re-score based on accurate maps times
-        const avg = (commuteTimeAM + commuteTimePM) / 2;
-        let commuteScore = 0;
-        if (avg <= 40) commuteScore = 100;
-        else if (avg <= 60) commuteScore = 75;
-        else if (avg <= 75) commuteScore = 50;
-        else if (avg <= 90) commuteScore = 25;
-        else commuteScore = 0;
-        
-        scores.commuteScore = commuteScore;
-        scores.overallScore = Math.round(
-          commuteScore * 0.35 +
-          scores.landScore * 0.25 +
-          scores.budgetScore * 0.20 +
-          scores.horseScore * 0.10 +
-          scores.buildabilityScore * 0.10
+      // Calculate Scores — profile-aware
+      let scores: any;
+      if (profileId === 'firsthome') {
+        scores = calculateFHBScores(
+          {
+            price: extracted.price || 0,
+            bedrooms: extracted.bedrooms || 0,
+            bathrooms: extracted.bathrooms || 0,
+            garages,
+            landSqm,
+          },
+          lat && lng ? { lat, lng } : null,
+          commuteTimeAM,
+          commuteTimePM,
         );
+      } else {
+        const propertyFeatures = {
+          landSize: extracted.landSize || 0,
+          price: extracted.price || 0,
+          existingHouse: extracted.existingHouse,
+          vacantLand: extracted.vacantLand,
+          shed: extracted.shed,
+          dam: extracted.dam,
+          waterTanks: extracted.waterTanks,
+          stables: extracted.stables,
+          horseFacilities: extracted.horseFacilities,
+          powerConnected: extracted.powerConnected,
+          septic: extracted.septic,
+        };
+        scores = calculateScores(propertyFeatures, lat && lng ? { lat, lng } : null, dest.lat, dest.lng);
+        if (commuteTimeAM > 0 && commuteTimePM > 0) {
+          scores.commuteTimeAM = commuteTimeAM;
+          scores.commuteTimePM = commuteTimePM;
+          // Re-score based on accurate maps times
+          const avg = (commuteTimeAM + commuteTimePM) / 2;
+          let cs = 0;
+          if (avg <= 40) cs = 100;
+          else if (avg <= 60) cs = 75;
+          else if (avg <= 75) cs = 50;
+          else if (avg <= 90) cs = 25;
+          scores.commuteScore = cs;
+          scores.overallScore = Math.round(
+            cs * 0.35 +
+            scores.landScore * 0.25 +
+            scores.budgetScore * 0.20 +
+            scores.horseScore * 0.10 +
+            scores.buildabilityScore * 0.10
+          );
+        }
+        scores.houseSizeScore = 0;
       }
 
       // Merge images: prefer parsed images, fill with browser-captured ones
@@ -243,6 +281,10 @@ async function startServer() {
         lng,
         images: mergedImages,
         ...scores,
+        profileId,
+        garages,
+        landSqm,
+        isNewBuild,
         status: "New",
         notes: "",
         url: url || "",
@@ -265,6 +307,12 @@ async function startServer() {
     };
     const canonicalUrl = normalizeUrl(p.url || "");
 
+    const profileId: ProfileId = p.profileId || 'farm';
+    const garages = Number(p.garages) || 0;
+    const landSqm = Number(p.landSqm) || 0;
+    const isNewBuild = p.isNewBuild ? 1 : 0;
+    const houseSizeScore = Number(p.houseSizeScore) || 0;
+
     const fieldValues = [
       canonicalUrl,
       p.address,
@@ -273,6 +321,9 @@ async function startServer() {
       Number(p.bedrooms) || 0,
       Number(p.bathrooms) || 0,
       Number(p.carSpaces) || 0,
+      garages,
+      landSqm,
+      isNewBuild,
       p.description || "",
       p.agentName || "",
       p.agentAgency || "",
@@ -300,7 +351,9 @@ async function startServer() {
       Number(p.budgetScore) || 0,
       Number(p.horseScore) || 0,
       Number(p.buildabilityScore) || 0,
+      houseSizeScore,
       Number(p.overallScore) || 0,
+      profileId,
     ];
 
     const mapBooleans = (row: any) => ({
@@ -315,6 +368,7 @@ async function startServer() {
       horseFacilities: row.horseFacilities === 1,
       powerConnected: row.powerConnected === 1,
       septic: row.septic === 1,
+      isNewBuild: row.isNewBuild === 1,
     });
 
     try {
@@ -324,11 +378,13 @@ async function startServer() {
         // Update all listing data but preserve user's notes and status
         await db.run(
           `UPDATE properties SET
-            url = ?, address = ?, price = ?, landSize = ?, bedrooms = ?, bathrooms = ?, carSpaces = ?, description = ?,
-            agentName = ?, agentAgency = ?, agentPhone = ?, images = ?, lat = ?, lng = ?,
+            url = ?, address = ?, price = ?, landSize = ?, bedrooms = ?, bathrooms = ?, carSpaces = ?,
+            garages = ?, landSqm = ?, isNewBuild = ?,
+            description = ?, agentName = ?, agentAgency = ?, agentPhone = ?, images = ?, lat = ?, lng = ?,
             existingHouse = ?, vacantLand = ?, shed = ?, dam = ?, waterTanks = ?, stables = ?, horseFacilities = ?, powerConnected = ?, septic = ?,
             bushfireMentions = ?, buildabilityMentions = ?, planningReferences = ?, nativeVegetationReferences = ?,
-            commuteScore = ?, commuteTimeAM = ?, commuteTimePM = ?, landScore = ?, budgetScore = ?, horseScore = ?, buildabilityScore = ?, overallScore = ?,
+            commuteScore = ?, commuteTimeAM = ?, commuteTimePM = ?, landScore = ?, budgetScore = ?, horseScore = ?, buildabilityScore = ?, houseSizeScore = ?, overallScore = ?,
+            profile_id = ?,
             status = ?, notes = ?
           WHERE id = ?`,
           [...fieldValues, existing.status || "New", existing.notes || "", existing.id]
@@ -338,13 +394,15 @@ async function startServer() {
       } else {
         const result = await db.run(
           `INSERT INTO properties (
-            url, address, price, landSize, bedrooms, bathrooms, carSpaces, description,
-            agentName, agentAgency, agentPhone, images, lat, lng,
+            url, address, price, landSize, bedrooms, bathrooms, carSpaces,
+            garages, landSqm, isNewBuild,
+            description, agentName, agentAgency, agentPhone, images, lat, lng,
             existingHouse, vacantLand, shed, dam, waterTanks, stables, horseFacilities, powerConnected, septic,
             bushfireMentions, buildabilityMentions, planningReferences, nativeVegetationReferences,
-            commuteScore, commuteTimeAM, commuteTimePM, landScore, budgetScore, horseScore, buildabilityScore, overallScore,
+            commuteScore, commuteTimeAM, commuteTimePM, landScore, budgetScore, horseScore, buildabilityScore, houseSizeScore, overallScore,
+            profile_id,
             status, notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [...fieldValues, p.status || "New", p.notes || ""]
         );
         const saved = await db.get("SELECT * FROM properties WHERE id = ?", [result.lastID]);
@@ -363,11 +421,13 @@ async function startServer() {
     try {
       await db.run(
         `UPDATE properties SET
-          url = ?, address = ?, price = ?, landSize = ?, bedrooms = ?, bathrooms = ?, carSpaces = ?, description = ?,
-          agentName = ?, agentAgency = ?, agentPhone = ?, images = ?, lat = ?, lng = ?,
+          url = ?, address = ?, price = ?, landSize = ?, bedrooms = ?, bathrooms = ?, carSpaces = ?,
+          garages = ?, landSqm = ?, isNewBuild = ?,
+          description = ?, agentName = ?, agentAgency = ?, agentPhone = ?, images = ?, lat = ?, lng = ?,
           existingHouse = ?, vacantLand = ?, shed = ?, dam = ?, waterTanks = ?, stables = ?, horseFacilities = ?, powerConnected = ?, septic = ?,
           bushfireMentions = ?, buildabilityMentions = ?, planningReferences = ?, nativeVegetationReferences = ?,
-          commuteScore = ?, commuteTimeAM = ?, commuteTimePM = ?, landScore = ?, budgetScore = ?, horseScore = ?, buildabilityScore = ?, overallScore = ?,
+          commuteScore = ?, commuteTimeAM = ?, commuteTimePM = ?, landScore = ?, budgetScore = ?, horseScore = ?, buildabilityScore = ?, houseSizeScore = ?, overallScore = ?,
+          profile_id = ?,
           status = ?, notes = ?
         WHERE id = ?`,
         [
@@ -378,6 +438,9 @@ async function startServer() {
           Number(p.bedrooms) || 0,
           Number(p.bathrooms) || 0,
           Number(p.carSpaces) || 0,
+          Number(p.garages) || 0,
+          Number(p.landSqm) || 0,
+          p.isNewBuild ? 1 : 0,
           p.description || "",
           p.agentName || "",
           p.agentAgency || "",
@@ -405,7 +468,9 @@ async function startServer() {
           Number(p.budgetScore) || 0,
           Number(p.horseScore) || 0,
           Number(p.buildabilityScore) || 0,
+          Number(p.houseSizeScore) || 0,
           Number(p.overallScore) || 0,
+          p.profileId || 'farm',
           p.status || "New",
           p.notes || "",
           id,
@@ -425,6 +490,7 @@ async function startServer() {
         horseFacilities: updated.horseFacilities === 1,
         powerConnected: updated.powerConnected === 1,
         septic: updated.septic === 1,
+        isNewBuild: updated.isNewBuild === 1,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
