@@ -204,10 +204,10 @@ export default function PropertyDetail({ property, onUpdate, onDelete, activePro
             {/* Bento score cards */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { title: SCORE_LABELS[activeProfile].commute, score: property.commuteScore, display: fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2)), desc: "avg commute", weight: "35%" },
-                { title: SCORE_LABELS[activeProfile].land, score: property.landScore, display: null, desc: `${property.landSize.toFixed(1)} ac`, weight: "25%" },
-                { title: SCORE_LABELS[activeProfile].budget, score: property.budgetScore, display: null, desc: `$${(property.price/1000).toFixed(0)}k`, weight: "20%" },
-                { title: SCORE_LABELS[activeProfile].primary, score: SCORE_LABELS[activeProfile].primaryScore(property), display: null, desc: activeProfile === 'farm' ? "Equine suitability" : "House size fit", weight: "10%" },
+                { title: SCORE_LABELS[activeProfile].commute, score: property.commuteScore, display: fmtMins(Math.round((property.commuteTimeAM + property.commuteTimePM) / 2)), desc: "avg commute", weight: SCORE_LABELS[activeProfile].commuteWeight },
+                { title: SCORE_LABELS[activeProfile].land, score: property.landScore, display: null, desc: `${property.landSize.toFixed(1)} ac`, weight: SCORE_LABELS[activeProfile].landWeight },
+                { title: SCORE_LABELS[activeProfile].budget, score: property.budgetScore, display: null, desc: `$${(property.price/1000).toFixed(0)}k`, weight: SCORE_LABELS[activeProfile].budgetWeight },
+                { title: SCORE_LABELS[activeProfile].primary, score: SCORE_LABELS[activeProfile].primaryScore(property), display: null, desc: activeProfile === 'farm' ? "Equine suitability" : "House size fit", weight: SCORE_LABELS[activeProfile].primaryWeight },
               ].map((card) => (
                 <div key={card.title} className={`p-3 border rounded-xl flex flex-col justify-between items-center text-center transition-all hover:scale-[1.03] ${getScoreBg(card.score)}`}>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-main">{card.title}</p>

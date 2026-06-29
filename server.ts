@@ -497,10 +497,14 @@ async function startServer() {
     }
   });
 
-  // API ROUTE: Delete all properties
+  // API ROUTE: Delete all properties for a given profile
   app.delete("/api/properties", async (req, res) => {
     try {
-      await db.run("DELETE FROM properties", []);
+      const profileId = req.query.profile as string;
+      if (!profileId || (profileId !== 'farm' && profileId !== 'firsthome')) {
+        return res.status(400).json({ error: 'Missing or invalid ?profile= query parameter (must be "farm" or "firsthome")' });
+      }
+      await db.run("DELETE FROM properties WHERE profile_id = ?", [profileId]);
       res.json({ status: "ok" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

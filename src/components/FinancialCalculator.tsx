@@ -135,7 +135,7 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
     const lmi = (usingFHG || depositPct >= 20 || useHelpToBuy) ? 0 : calcLMI(loanAmount, lvr);
     const duty = calcFHBDuty(price);
     const fhogOffset = (isNewBuild && price <= 750000) ? 10000 : 0;
-    const totalCash = deposit + duty + 2500 + 800 + lmi - fhogOffset - helpToBuyEquity;
+    const totalCash = deposit + duty + 2500 + 800 + lmi - fhogOffset;
     const rentalOffsetMonthly = Math.round((roomRentalWeekly * 52) / 12);
     const rates = [0.055, 0.06, 0.065] as const;
     const terms = [25, 30] as const;
@@ -198,7 +198,6 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
                 ['Building & pest inspection', fmt(800)],
                 ...(lmi > 0 ? [['LMI (estimated)', fmt(lmi)]] : []),
                 ...(fhogOffset > 0 ? [['FHOG offset (new build)', `−${fmt(fhogOffset)}`]] : []),
-                ...(useHelpToBuy ? [['Help to Buy equity', `−${fmt(helpToBuyEquity)}`]] : []),
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between text-text-dim">
                   <span>{label}</span>
@@ -210,6 +209,11 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
                 <span className="font-mono text-success-dark">{fmt(totalCash)}</span>
               </div>
             </div>
+            {useHelpToBuy && (
+              <p className="text-xs text-text-dim mt-2 italic">
+                Help to Buy reduces your loan by {fmt(helpToBuyEquity)} — repayments are calculated on the reduced loan.
+              </p>
+            )}
           </div>
 
           {/* Loan + repayments */}

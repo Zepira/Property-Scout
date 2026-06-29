@@ -74,7 +74,7 @@ export default function PropertyForm({ onSuccess, activeProfile }: PropertyFormP
       const response = await fetch("/api/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlInput }),
+        body: JSON.stringify({ url: urlInput, profileId: activeProfile, garages, landSqm, isNewBuild }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error);
@@ -83,7 +83,7 @@ export default function PropertyForm({ onSuccess, activeProfile }: PropertyFormP
       const saveResponse = await fetch("/api/properties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, profileId: activeProfile, garages, landSqm, isNewBuild }),
       });
       const savedData = await saveResponse.json();
       setUrlInput("");
@@ -115,7 +115,7 @@ export default function PropertyForm({ onSuccess, activeProfile }: PropertyFormP
       const response = await fetch("/api/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ descriptionText: pastedText }),
+        body: JSON.stringify({ descriptionText: pastedText, profileId: activeProfile }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error);
@@ -124,7 +124,7 @@ export default function PropertyForm({ onSuccess, activeProfile }: PropertyFormP
       const saveResponse = await fetch("/api/properties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, profileId: activeProfile }),
       });
       const savedData = await saveResponse.json();
       setPastedText("");
