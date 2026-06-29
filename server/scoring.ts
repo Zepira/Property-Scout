@@ -1,6 +1,21 @@
-// Moorabbin Moorabbin coordinates
-const MOORABBIN_LAT = -37.947291;
-const MOORABBIN_LNG = 145.064560;
+import type { ProfileId } from '../src/types.js';
+
+export const PROFILE_CONFIG: Record<ProfileId, { label: string; lat: number; lng: number }> = {
+  farm: {
+    label: 'Moorabbin',
+    lat: -37.947291,
+    lng: 145.064560,
+  },
+  firsthome: {
+    label: 'Marnebek School, Cranbourne',
+    lat: -38.1156,
+    lng: 145.2831,
+  },
+};
+
+// Keep these for backwards compat — they now delegate to PROFILE_CONFIG
+const MOORABBIN_LAT = PROFILE_CONFIG.farm.lat;
+const MOORABBIN_LNG = PROFILE_CONFIG.farm.lng;
 
 export interface PropertyFeatures {
   landSize: number; // In acres
@@ -69,7 +84,9 @@ export async function geocodeAddress(address: string, apiKey: string): Promise<{
 export async function fetchCommuteTimes(
   lat: number,
   lng: number,
-  apiKey: string
+  apiKey: string,
+  destLat: number = MOORABBIN_LAT,
+  destLng: number = MOORABBIN_LNG,
 ): Promise<{ timeAM: number; timePM: number } | null> {
   if (!apiKey) return null;
 
@@ -93,7 +110,7 @@ export async function fetchCommuteTimes(
       },
       body: JSON.stringify({
         origin: { location: { latLng: { latitude: lat, longitude: lng } } },
-        destination: { location: { latLng: { latitude: MOORABBIN_LAT, longitude: MOORABBIN_LNG } } },
+        destination: { location: { latLng: { latitude: destLat, longitude: destLng } } },
         travelMode: "DRIVE",
         routingPreference: "TRAFFIC_AWARE",
         departureTime: departureIso,
@@ -126,7 +143,9 @@ export async function fetchCommuteTimes(
  */
 export function calculateScores(
   features: PropertyFeatures,
-  coordinates: { lat: number; lng: number } | null
+  coordinates: { lat: number; lng: number } | null,
+  destLat: number = MOORABBIN_LAT,
+  destLng: number = MOORABBIN_LNG,
 ): ScoreBreakdown {
   // 1. Commute Score (35%)
   let commuteTimeAM = 45; // Default placeholder values
@@ -137,8 +156,8 @@ export function calculateScores(
     const straightLineKm = getHaversineDistance(
       coordinates.lat,
       coordinates.lng,
-      MOORABBIN_LAT,
-      MOORABBIN_LNG
+      destLat,
+      destLng
     );
     // Estimated driving road factor (approx 1.25x straight line)
     const roadKm = straightLineKm * 1.25;
@@ -236,5 +255,92 @@ export function calculateScores(
     horseScore,
     buildabilityScore,
     overallScore,
+  };
+}
+
+export interface FHBPropertyFeatures {
+  price: number;
+  bedrooms: number;
+  bathrooms: number;
+  garages: number;
+  landSqm: number;
+}
+
+export interface FHBScoreBreakdown {
+  commuteScore: number;
+  commuteTimeAM: number;
+  commuteTimePM: number;
+  budgetScore: number;
+  houseSizeScore: number;
+  landScore: number;
+  horseScore: 0;
+  buildabilityScore: 0;
+  overallScore: number;
+}
+
+function scoreFHBBudget(price: number): number {
+  if (price <= 700000) return 100;
+  if (price <= 750000) return 85;
+  if (price <= 800000) return 65;
+  if (price <= 900000) return 35;
+  return 10;
+}
+
+function scoreFHBHouseSize(bedrooms: number, bathrooms: number, garages: number): number {
+  const bedScore = bedrooms >= 4 ? 100 : bedrooms === 3 ? 75 : bedrooms === 2 ? 40 : 15;
+  const bathScore = bathrooms >= 2 ? 100 : bathrooms === 1 ? 55 : 0;
+  const garageScore = garages >= 2 ? 100 : garages === 1 ? 70 : 0;
+  return Math.round(bedScore * 0.5 + bathScore * 0.3 + garageScore * 0.2);
+}
+
+function scoreFHBLand(landSqm: number): number {
+  if (landSqm >= 800) return 100;
+  if (landSqm >= 600) return 80;
+  if (landSqm >= 400) return 60;
+  if (landSqm >= 300) return 40;
+  return 20;
+}
+
+function scoreFHBCommute(avgMins: number): number {
+  if (avgMins <= 15) return 100;
+  if (avgMins <= 25) return 80;
+  if (avgMins <= 35) return 60;
+  if (avgMins <= 45) return 35;
+  return 10;
+}
+
+export function calculateFHBScores(
+  features: FHBPropertyFeatures,
+  coordinates: { lat: number; lng: number } | null,
+  commuteTimeAM = 0,
+  commuteTimePM = 0,
+): FHBScoreBreakdown {
+  let timeAM = commuteTimeAM;
+  let timePM = commuteTimePM;
+
+  if (!timeAM && !timePM && coordinates) {
+    const dest = PROFILE_CONFIG.firsthome;
+    const roadKm = getHaversineDistance(coordinates.lat, coordinates.lng, dest.lat, dest.lng) * 1.25;
+    timeAM = Math.max(1, Math.round((roadKm / 72) * 60));
+    timePM = Math.max(1, Math.round((roadKm / 55) * 60));
+  }
+
+  const avg = (timeAM + timePM) / 2;
+  const budget = scoreFHBBudget(features.price);
+  const houseSize = scoreFHBHouseSize(features.bedrooms, features.bathrooms, features.garages);
+  const land = scoreFHBLand(features.landSqm);
+  const commute = scoreFHBCommute(avg);
+  const overall = Math.round(budget * 0.35 + houseSize * 0.25 + land * 0.20 + commute * 0.20);
+
+  return {
+    commuteScore: commute,
+    commuteTimeAM: timeAM,
+    commuteTimePM: timePM,
+    budgetScore: budget,
+    houseSizeScore: houseSize,
+    landScore: land,
+    horseScore: 0,
+    buildabilityScore: 0,
+    overallScore: overall,
   };
 }
