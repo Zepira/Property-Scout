@@ -20,7 +20,7 @@ export default function App() {
   // Filters & Sorting state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<PropertyStatus | "All">("All");
-  const [sortBy, setSortBy] = useState<"score" | "price_asc" | "price_desc" | "acres">("score");
+  const [sortBy, setSortBy] = useState<"commute" | "score" | "price_asc" | "price_desc" | "acres">("commute");
 
   // Load properties on mount, then poll every 5s to pick up extension imports
   useEffect(() => {
@@ -112,6 +112,9 @@ export default function App() {
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
+      if (sortBy === "commute") {
+        return (a.commuteTimeAM + a.commuteTimePM) - (b.commuteTimeAM + b.commuteTimePM);
+      }
       if (sortBy === "score") {
         return b.overallScore - a.overallScore;
       }
@@ -257,6 +260,7 @@ export default function App() {
                   onChange={(e) => setSortBy(e.target.value as any)}
                   className="w-full py-1.5 px-2 bg-bg-dark border border-border-dark rounded-md text-text-main font-medium cursor-pointer focus:outline-none focus:border-accent-dark"
                 >
+                  <option value="commute">Commute: Shortest First</option>
                   <option value="score">Overall Score</option>
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
