@@ -12,10 +12,10 @@ interface PropertyDetailProps {
   property: Property;
   onUpdate: (updated: Property) => void;
   onDelete: (id: number) => void;
-  activeProfile?: import('../types').ProfileId;
+  activeProfile: import('../types').ProfileId;
 }
 
-export default function PropertyDetail({ property, onUpdate, onDelete }: PropertyDetailProps) {
+export default function PropertyDetail({ property, onUpdate, onDelete, activeProfile }: PropertyDetailProps) {
   const [activeNotes, setActiveNotes] = useState(property.notes || "");
   const [status, setStatus] = useState<PropertyStatus>(property.status);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -333,7 +333,11 @@ export default function PropertyDetail({ property, onUpdate, onDelete }: Propert
           </div>
 
           {/* Financial Buying Calculator */}
-          <FinancialCalculator price={property.price} />
+          <FinancialCalculator
+            price={property.price}
+            isNewBuild={property.isNewBuild}
+            activeProfile={activeProfile}
+          />
 
           {/* Agent Information */}
           <div className="bg-bg-dark border border-border-dark rounded-xl p-4">
