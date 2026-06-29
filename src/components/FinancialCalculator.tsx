@@ -135,7 +135,7 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
     const lmi = (usingFHG || depositPct >= 20 || useHelpToBuy) ? 0 : calcLMI(loanAmount, lvr);
     const duty = calcFHBDuty(price);
     const fhogOffset = (isNewBuild && price <= 750000) ? 10000 : 0;
-    const totalCash = deposit + duty + 2500 + 800 + lmi - fhogOffset;
+    const totalCash = deposit + duty + 2500 + 800 + lmi - fhogOffset - helpToBuyEquity;
     const rentalOffsetMonthly = Math.round((roomRentalWeekly * 52) / 12);
     const rates = [0.055, 0.06, 0.065] as const;
     const terms = [25, 30] as const;
@@ -170,7 +170,7 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
                       : 'bg-bg-dark border-border-dark text-text-dim hover:bg-slate-800/60 hover:text-text-main'
                   }`}
                 >
-                  {pct}% ({fmt(deposit)})
+                  {pct}% ({fmt(Math.round(price * pct / 100))})
                 </button>
               ))}
             </div>
