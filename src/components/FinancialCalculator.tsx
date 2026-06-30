@@ -118,10 +118,10 @@ function SchemePanel({ price, isNewBuild }: { price: number; isNewBuild: boolean
 }
 
 export default function FinancialCalculator({ price, isNewBuild, activeProfile }: FinancialCalculatorProps) {
-  const [depositPct, setDepositPct] = useState<5 | 10 | 20>(20);
+  const [depositPct, setDepositPct] = useState<2 | 5 | 10 | 20>(2);
   const [selectedRate, setSelectedRate] = useState<5.5 | 6.0 | 6.5>(6.0);
   const [selectedTerm, setSelectedTerm] = useState<25 | 30>(30);
-  const [useHelpToBuy, setUseHelpToBuy] = useState(false);
+  const [useHelpToBuy, setUseHelpToBuy] = useState(true);
   const [roomRentalWeekly, setRoomRentalWeekly] = useState(400);
 
   if (activeProfile === 'firsthome') {
@@ -159,8 +159,8 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
             <label className="text-xs font-semibold text-text-dim uppercase tracking-wider mb-2 block">
               Deposit Percentage
             </label>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {([5, 10, 20] as const).map(pct => (
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {([2, 5, 10, 20] as const).map(pct => (
                 <button
                   key={pct}
                   onClick={() => setDepositPct(pct)}
@@ -178,10 +178,14 @@ export default function FinancialCalculator({ price, isNewBuild, activeProfile }
               <input
                 type="checkbox"
                 checked={useHelpToBuy}
-                onChange={e => setUseHelpToBuy(e.target.checked)}
+                onChange={e => {
+                  setUseHelpToBuy(e.target.checked);
+                  if (e.target.checked) setDepositPct(2);
+                  else if (depositPct === 2) setDepositPct(5);
+                }}
                 className="w-4 h-4 accent-accent-dark"
               />
-              Using Help to Buy <span className="text-xs text-text-dim">(govt {isNewBuild ? '40%' : '30%'} equity — verify eligibility)</span>
+              Using Help to Buy <span className="text-xs text-text-dim">(govt {isNewBuild ? '40%' : '30%'} equity · 2% min deposit · no LMI)</span>
             </label>
           </div>
 

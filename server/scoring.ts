@@ -1,15 +1,19 @@
 import type { ProfileId } from '../src/types.js';
 
-export const PROFILE_CONFIG: Record<ProfileId, { label: string; lat: number; lng: number }> = {
+export const PROFILE_CONFIG: Record<ProfileId, { label: string; lat: number; lng: number; departHour: number; departMinute: number; returnHour: number; returnMinute: number }> = {
   farm: {
     label: 'Moorabbin',
     lat: -37.947291,
     lng: 145.064560,
+    departHour: 8, departMinute: 0,
+    returnHour: 17, returnMinute: 30,
   },
   firsthome: {
     label: 'Marnebek School, Cranbourne',
     lat: -38.1156,
     lng: 145.2831,
+    departHour: 8, departMinute: 0,
+    returnHour: 16, returnMinute: 0,
   },
 };
 
@@ -87,6 +91,10 @@ export async function fetchCommuteTimes(
   apiKey: string,
   destLat: number = MOORABBIN_LAT,
   destLng: number = MOORABBIN_LNG,
+  departHour: number = 8,
+  departMinute: number = 0,
+  returnHour: number = 17,
+  returnMinute: number = 30,
 ): Promise<{ timeAM: number; timePM: number } | null> {
   if (!apiKey) return null;
 
@@ -127,8 +135,8 @@ export async function fetchCommuteTimes(
 
   try {
     const [timeAM, timePM] = await Promise.all([
-      routesDuration(makeDepTime(8, 0)),
-      routesDuration(makeDepTime(17, 30)),
+      routesDuration(makeDepTime(departHour, departMinute)),
+      routesDuration(makeDepTime(returnHour, returnMinute)),
     ]);
     console.log(`Commute via Routes API: AM=${timeAM}min PM=${timePM}min`);
     return { timeAM, timePM };

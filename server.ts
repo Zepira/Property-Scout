@@ -5,7 +5,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { getDb } from "./server/db.js";
-import { extractPropertyFromUrl, extractPropertyFromText } from "./server/analyzer.js";
+import { extractPropertyFromUrl, extractPropertyFromText, addressFromUrl } from "./server/analyzer.js";
 import type { ProfileId } from './src/types.js';
 import { calculateScores, calculateFHBScores, geocodeAddress, fetchCommuteTimes, PROFILE_CONFIG } from "./server/scoring.js";
 
@@ -112,7 +112,8 @@ async function startServer() {
       if (url && (url.includes("domain.com.au") || url.includes("realestate.com.au") || url.startsWith("http"))) {
         let pageHtml = htmlContent || "";
 
-        if (!pageHtml) {
+        if (!pageHtml || pageHtml.length < 500) {
+          if (pageHtml) console.warn(`Extension content too short (${pageHtml.length} chars) — falling back to server-side fetch`);
           console.log(`Fetching page HTML for: ${url}`);
           try {
             const pageRes = await fetch(url, {
@@ -178,14 +179,17 @@ async function startServer() {
       let lat = extracted.lat;
       let lng = extracted.lng;
 
-      if ((!lat || !lng) && extracted.address) {
-        const coords = await geocodeAddress(extracted.address, mapKey);
+      const geocodeTarget = extracted.address || addressFromUrl(url || "");
+      console.log(`[geocode] extracted.address="${extracted.address}" geocodeTarget="${geocodeTarget}" lat=${lat} lng=${lng}`);
+      if ((!lat || !lng) && geocodeTarget) {
+        if (!extracted.address) console.log(`No address extracted — geocoding from URL: "${geocodeTarget}"`);
+        const coords = await geocodeAddress(geocodeTarget, mapKey);
         if (coords) {
           lat = coords.lat;
           lng = coords.lng;
         } else {
-          console.warn(`No coordinates for "${extracted.address}" — geocoding failed, using suburb lookup`);
-          const addr = extracted.address.toLowerCase();
+          console.warn(`No coordinates for "${geocodeTarget}" — geocoding failed, using suburb lookup`);
+          const addr = geocodeTarget.toLowerCase();
           const suburbCoords: [string[], number, number][] = [
             [["gembrook", "tonimbuk"], -37.9528, 145.5581],
             [["hoddles creek", "launching place"], -37.7833, 145.5500],
@@ -211,7 +215,7 @@ async function startServer() {
       let commuteTimeAM = 0;
       let commuteTimePM = 0;
       if (lat && lng && mapKey) {
-        const commute = await fetchCommuteTimes(lat, lng, mapKey, dest.lat, dest.lng);
+        const commute = await fetchCommuteTimes(lat, lng, mapKey, dest.lat, dest.lng, dest.departHour, dest.departMinute, dest.returnHour, dest.returnMinute);
         if (commute) {
           commuteTimeAM = commute.timeAM;
           commuteTimePM = commute.timePM;

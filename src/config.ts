@@ -1,15 +1,19 @@
 import { ProfileId } from './types';
 
-export const PROFILE_CONFIG: Record<ProfileId, { label: string; lat: number; lng: number }> = {
+export const PROFILE_CONFIG: Record<ProfileId, { label: string; lat: number; lng: number; departHour: number; departMinute: number; returnHour: number; returnMinute: number }> = {
   farm: {
     label: 'Moorabbin',
     lat: -37.947291,
     lng: 145.064560,
+    departHour: 8, departMinute: 0,
+    returnHour: 17, returnMinute: 30,
   },
   firsthome: {
     label: 'Marnebek School, Cranbourne',
     lat: -38.1156,
     lng: 145.2831,
+    departHour: 8, departMinute: 0,
+    returnHour: 16, returnMinute: 0,
   },
 };
 

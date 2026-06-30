@@ -2,7 +2,7 @@ const SERVER = "http://localhost:5000";
 
 const LISTING_PATTERNS = [
   /domain\.com\.au\/[\w-]+-\d{5,}/,
-  /realestate\.com\.au\/property-[\w-]+-\d{5,}/,
+  /realestate\.com\.au\/property-[\w+\-]+-\d{5,}/,
 ];
 
 function isListingUrl(url) {
@@ -23,7 +23,7 @@ function setStatus(el, state, text) {
   el.textContent = text;
 }
 
-async function scrapeTab(tab, statusEl) {
+async function scrapeTab(tab, statusEl, profileId) {
   setStatus(statusEl, "loading", "Reading page...");
 
   // Step 1: inject a script into the tab to grab page content
@@ -46,14 +46,41 @@ async function scrapeTab(tab, statusEl) {
             })
             .filter(Boolean);
 
-          // __NEXT_DATA__ — domain.com.au / realestate.com.au store full listing here
+          // __NEXT_DATA__ — try by ID first, then scan all application/json scripts
           let nextData = null;
-          const nextScript = document.getElementById("__NEXT_DATA__");
-          if (nextScript) {
-            try {
-              nextData = JSON.parse(nextScript.textContent);
-            } catch {}
+          const nextById = document.getElementById("__NEXT_DATA__");
+          if (nextById) {
+            try { nextData = JSON.parse(nextById.textContent); } catch {}
           }
+          if (!nextData) {
+            for (const s of document.querySelectorAll('script[type="application/json"]')) {
+              try {
+                const parsed = JSON.parse(s.textContent);
+                // Accept any JSON object that looks like page/listing data
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                  nextData = parsed;
+                  break;
+                }
+              } catch {}
+            }
+          }
+          // Fallback: grab inline script content that contains lat/lng or address data
+          let rawScriptData = "";
+          if (!nextData) {
+            for (const s of document.querySelectorAll("script:not([src])")) {
+              const t = s.textContent || "";
+              if ((t.includes('"latitude"') || t.includes('"lat"')) && t.includes('"longitude"') && t.length < 500000) {
+                rawScriptData += t.substring(0, 100000);
+                break;
+              }
+            }
+          }
+
+          // Meta tags — title/description/OG often contain full address on listing sites
+          const pageTitle = document.title || "";
+          const metaDesc = document.querySelector('meta[name="description"]')?.content || "";
+          const ogTitle = document.querySelector('meta[property="og:title"]')?.content || "";
+          const ogDesc = document.querySelector('meta[property="og:description"]')?.content || "";
 
           // Images: OG image + all large listing photos
           const images = [];
@@ -90,6 +117,11 @@ async function scrapeTab(tab, statusEl) {
             ok: true,
             jsonLd,
             nextData,
+            rawScriptData,
+            pageTitle,
+            metaDesc,
+            ogTitle,
+            ogDesc,
             images: images.slice(0, 20),
             visibleText,
             url: location.href,
@@ -128,7 +160,7 @@ async function scrapeTab(tab, statusEl) {
     return;
   }
 
-  const { jsonLd, nextData, images: pageImages, visibleText, url } = injected;
+  const { jsonLd, nextData, rawScriptData, pageTitle, metaDesc, ogTitle, ogDesc, images: pageImages, visibleText, url } = injected;
 
   if (!visibleText || visibleText.length < 50) {
     setStatus(
@@ -143,11 +175,12 @@ async function scrapeTab(tab, statusEl) {
   // Append __NEXT_DATA__ as extra context if present.
   const structuredPart =
     jsonLd && jsonLd.length ? JSON.stringify(jsonLd) : "[]";
-  // Send enough of __NEXT_DATA__ to capture gallery + geo (coords are often deep in the JSON)
+  const metaPart = [pageTitle, ogTitle, metaDesc, ogDesc].filter(Boolean).join("\n");
   const nextPart = nextData
     ? "\n\nNEXT_DATA:" + JSON.stringify(nextData).substring(0, 60000)
     : "";
-  const htmlContent = structuredPart + "\n\n" + visibleText + nextPart;
+  const scriptPart = rawScriptData ? "\n\nRAW_SCRIPT:" + rawScriptData.substring(0, 100000) : "";
+  const htmlContent = structuredPart + "\n\n" + metaPart + "\n" + visibleText + nextPart + scriptPart;
   const browserImages = pageImages || [];
 
   // Step 2: send to local server
@@ -159,7 +192,7 @@ async function scrapeTab(tab, statusEl) {
     scrapeRes = await fetch(`${SERVER}/api/scrape`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, htmlContent, browserImages }),
+      body: JSON.stringify({ url, htmlContent, browserImages, profileId }),
     });
     scraped = await scrapeRes.json();
   } catch (e) {
@@ -208,9 +241,19 @@ async function scrapeTab(tab, statusEl) {
   setStatus(statusEl, "success", label + (saved.address || scraped.address || "property"));
 }
 
+// Persist selected profile across popup opens
+const profileSelect = document.getElementById("profile-select");
+chrome.storage.local.get("profileId", ({ profileId }) => {
+  if (profileId) profileSelect.value = profileId;
+});
+profileSelect.addEventListener("change", () => {
+  chrome.storage.local.set({ profileId: profileSelect.value });
+});
+
 document.getElementById("scan-btn").addEventListener("click", async () => {
   const btn = document.getElementById("scan-btn");
   const resultsEl = document.getElementById("results");
+  const profileId = profileSelect.value;
   btn.disabled = true;
   btn.textContent = "Scanning...";
   resultsEl.innerHTML = "";
@@ -244,7 +287,7 @@ document.getElementById("scan-btn").addEventListener("click", async () => {
     return row.querySelector(".tab-status");
   });
 
-  await Promise.all(listingTabs.map((tab, i) => scrapeTab(tab, statusEls[i])));
+  await Promise.all(listingTabs.map((tab, i) => scrapeTab(tab, statusEls[i], profileId)));
 
   btn.disabled = false;
   btn.textContent = "Scan Open Tabs";

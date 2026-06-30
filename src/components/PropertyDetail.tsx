@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Property, PropertyStatus } from "../types";
-import { SCORE_LABELS } from "../config";
+import { SCORE_LABELS, PROFILE_CONFIG } from "../config";
 import PropertyMap from "./PropertyMap";
 import FinancialCalculator from "./FinancialCalculator";
 import { 
@@ -328,11 +328,11 @@ export default function PropertyDetail({ property, onUpdate, onDelete, activePro
             </h4>
             <div className="text-xs space-y-1.5 font-mono">
               <div className="flex justify-between">
-                <span className="text-text-dim">Departure 12:00 AM (Ideal):</span>
+                <span className="text-text-dim">Depart {PROFILE_CONFIG[activeProfile].departHour}:{String(PROFILE_CONFIG[activeProfile].departMinute).padStart(2,'0')} AM:</span>
                 <span className="font-bold text-text-main">{fmtMins(property.commuteTimeAM)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-dim">Departure 1:00 PM (Lighter traffic):</span>
+                <span className="text-text-dim">Return {PROFILE_CONFIG[activeProfile].returnHour % 12 || 12}:{String(PROFILE_CONFIG[activeProfile].returnMinute).padStart(2,'0')} PM:</span>
                 <span className="font-bold text-text-main">{fmtMins(property.commuteTimePM)}</span>
               </div>
               <div className="border-t border-border-dark pt-2 flex justify-between font-bold text-text-main">

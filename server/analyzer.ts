@@ -162,7 +162,7 @@ function fromJsonLd(nodes: any[]): Partial<ExtractionResult> | null {
 function fromText(text: string): Partial<ExtractionResult> {
   // Address: look for street number + name + suburb + VIC pattern
   const addrMatch = text.match(
-    /\d+[A-Za-z]?\s+[\w\s'-]+(?:Road|Rd|Street|St|Avenue|Ave|Drive|Dr|Court|Ct|Lane|Ln|Way|Place|Pl|Highway|Hwy|Crescent|Cres|Parade|Pde|Close|Cl)\s*,?\s*[\w\s]+(?:VIC|NSW|QLD|SA|WA)\s*\d{4}/i
+    /\d+[A-Za-z]?\s+[\w\s'-]+(?:Road|Rd|Street|St|Avenue|Ave|Drive|Dr|Court|Ct|Lane|Ln|Way|Place|Pl|Highway|Hwy|Crescent|Cres|Parade|Pde|Close|Cl)\s*,?\s*[\w\s,]+?(?:VIC|NSW|QLD|SA|WA)\s*\d{4}/i
   );
   const address = addrMatch ? addrMatch[0].replace(/\s+/g, " ").trim() : "";
 
@@ -323,7 +323,13 @@ export function extractPropertyFromText(content: string): ExtractionResult {
     // not JSON up front, treat everything as text
   }
 
-  // Extract and strip the NEXT_DATA block so it doesn't pollute the text parser
+  // Extract and strip NEXT_DATA / RAW_SCRIPT blocks so they don't pollute the text parser
+  const rawScriptIdx = text.indexOf("RAW_SCRIPT:");
+  let rawScript = "";
+  if (rawScriptIdx !== -1) {
+    rawScript = text.slice(rawScriptIdx + "RAW_SCRIPT:".length);
+    text = text.slice(0, rawScriptIdx).trim();
+  }
   const nextMatch = text.match(/NEXT_DATA:([\s\S]+)$/);
   if (nextMatch) {
     try { nextData = JSON.parse(nextMatch[1]); } catch {}
@@ -335,11 +341,15 @@ export function extractPropertyFromText(content: string): ExtractionResult {
   const fromTxt = fromText(text);
   const features = detectFeatures(text);
 
-  // Geo fallback: scan the full raw content for embedded map coordinates
+  console.log(`[analyzer] text preview: ${text.substring(0, 400).replace(/\s+/g, " ")}`);
+  console.log(`[analyzer] fromNd.address="${fromNd.address}" fromLd.address="${fromLd.address}" fromTxt.address="${fromTxt.address}"`);
+  console.log(`[analyzer] nextData=${nextData ? "present" : "null"} jsonLd=${jsonLdNodes.length} items types=${jsonLdNodes.map((n: any) => n?.["@type"] || n?.["@graph"]?.[0]?.["@type"]).join(",")}`);
+
+  // Geo fallback: scan raw script data, then full content
   let lat = fromNd.lat ?? fromLd.lat;
   let lng = fromNd.lng ?? fromLd.lng;
   if (!lat || !lng) {
-    const coords = extractCoordsFromText(content);
+    const coords = extractCoordsFromText(rawScript || content);
     if (coords) { lat = coords.lat; lng = coords.lng; }
   }
 
@@ -364,6 +374,18 @@ export function extractPropertyFromText(content: string): ExtractionResult {
   };
 
   return merged;
+}
+
+export function addressFromUrl(url: string): string {
+  // realestate.com.au: /property-house-vic-frankston-north-12345678
+  // domain.com.au:     /suburb-state-postcode/type-address-12345678
+  const rea = url.match(/property-[\w]+-([a-z]{2,3})-([\w+\-]+?)-\d{5,}/i);
+  if (rea) {
+    const state = rea[1].toUpperCase();
+    const suburb = rea[2].replace(/[-+]/g, " ").replace(/\b\w/g, c => c.toUpperCase()).trim();
+    return `${suburb} ${state}`;
+  }
+  return "";
 }
 
 export function extractPropertyFromUrl(url: string, htmlContent?: string): ExtractionResult {
